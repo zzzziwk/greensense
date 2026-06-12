@@ -2,3 +2,5 @@ greensense.db
 __pycache__/
 *.pyc
 .env
+app_new/node_modules/
+app_new/dist/

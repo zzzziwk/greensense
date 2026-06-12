@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
 GreenSense 센서 통합 수집 에이전트
-논문 기반 기준값으로 작물별 상태 판단
+베란다 실내 재배 환경 기반 논문 기준값
+토양수분 센서 2개 (A1, A3) 캘리브레이션 적용
+DHT11 최대 3회 재시도
+복합 스트레스 2개 이상 시 LED 점등
 """
 
 import time
 import adafruit_dht
 import board
 import spidev
-import paho.mqtt.client as mqtt   # 추가
-import json                        # 추가
+import paho.mqtt.client as mqtt
+import json
 
-# ── ADC 설정 (AIoT Server Plus 내장 ADC) ─────────────────────────
+# ── ADC 설정 ──────────────────────────────────────────────────────
 spi = spidev.SpiDev()
 spi.open(0, 0)
 spi.max_speed_hz = 1350000
@@ -20,8 +23,13 @@ def read_adc(channel):
     adc = spi.xfer2([1, (8 + channel) << 4, 0])
     return ((adc[1] & 3) << 8) + adc[2]
 
+# ── 토양수분 캘리브레이션 ─────────────────────────────────────────
+SOIL_DRY = 0
+SOIL_WET = 581
+
 def adc_to_soil_percent(raw):
-    return round((raw / 1023) * 100, 1)
+    percent = (raw - SOIL_DRY) / (SOIL_WET - SOIL_DRY) * 100
+    return round(max(0, min(100, percent)), 1)
 
 def adc_to_lux(raw):
     if raw == 0:
@@ -31,47 +39,44 @@ def adc_to_lux(raw):
 # ── DHT11 설정 ────────────────────────────────────────────────────
 dht = adafruit_dht.DHT11(board.D1)
 
-# ── 작물별 논문 기반 기준값 ───────────────────────────────────────
+# ── 작물별 베란다 환경 기반 기준값 ───────────────────────────────
 CROP_STANDARDS = {
     "상추": {
-        "temp":  (15, 20),
-        "humi":  (60, 70),
-        "soil":  (65, 85),
-        "lux":   (8000, 11000),
-        "co2":   (400, 1000),
+        "temp":  (15, 25),
+        "humi":  (60, 80),
+        "soil":  (50, 85),
+        "lux":   (1000, 12500),
+        "co2":   (400, 1500),
     },
     "깻잎": {
-        "temp":  (20, 25),
-        "humi":  (70, 80),
-        "soil":  (55, 65),
-        "lux":   (11000, 16200),
+        "temp":  (15, 24),
+        "humi":  (50, 70),
+        "soil":  (45, 70),
+        "lux":   (2000, 16200),
         "co2":   (400, 1000),
     },
     "대파": {
         "temp":  (15, 25),
-        "humi":  (60, 70),
-        "soil":  (60, 75),
-        "lux":   (5400, 11000),
+        "humi":  (55, 75),
+        "soil":  (45, 75),
+        "lux":   (800, 11000),
         "co2":   (400, 1000),
     },
     "시금치": {
-        "temp":  (15, 20),
-        "humi":  (60, 70),
-        "soil":  (65, 80),
-        "lux":   (6500, 11000),
+        "temp":  (10, 20),
+        "humi":  (55, 75),
+        "soil":  (50, 80),
+        "lux":   (1000, 11000),
         "co2":   (400, 1000),
     },
     "청경채": {
-        "temp":  (10, 25),
-        "humi":  (70, 80),
-        "soil":  (60, 75),
-        "lux":   (8000, 11000),
-        "co2":   (400, 1000),
+        "temp":  (15, 25),
+        "humi":  (60, 75),
+        "soil":  (45, 75),
+        "lux":   (1000, 11000),
+        "co2":   (400, 700),
     },
 }
-
-CO2_NORMAL  = (400,  1000)
-CO2_CAUTION = (1000, 1500)
 
 # ── 상태 판단 함수 ────────────────────────────────────────────────
 def check_status(value, normal_range):
@@ -103,26 +108,37 @@ def set_alert(is_alert):
 
 # ── 센서 읽기 함수 ────────────────────────────────────────────────
 def read_sensors():
-    try:
-        temp = dht.temperature
-        humi = dht.humidity
-    except Exception:
-        temp = None
-        humi = None
+    # DHT11 최대 3회 재시도
+    temp, humi = None, None
+    for _ in range(3):
+        try:
+            t = dht.temperature
+            h = dht.humidity
+            if t is not None and h is not None:
+                temp, humi = t, h
+                break
+        except Exception:
+            pass
+        time.sleep(0.5)
 
     cds_raw   = read_adc(0)
     soil_raw  = read_adc(1)
     gas_raw   = read_adc(2)
+    soil_raw2 = read_adc(3)
 
     lux       = adc_to_lux(cds_raw)
     soil_pct  = adc_to_soil_percent(soil_raw)
+    soil_pct2 = adc_to_soil_percent(soil_raw2)
+    soil_avg  = round((soil_pct + soil_pct2) / 2, 1)
     gas_ppm   = gas_raw
 
     return {
         "temp":     temp,
         "humi":     humi,
         "lux":      lux,
-        "soil":     soil_pct,
+        "soil":     soil_avg,
+        "soil1":    soil_pct,
+        "soil2":    soil_pct2,
         "gas_raw":  gas_raw,
         "gas_ppm":  gas_ppm,
         "cds_raw":  cds_raw,
@@ -139,10 +155,10 @@ def diagnose(crop_name, sensors):
     result = {"crop": crop_name, "sensors": {}, "alerts": []}
 
     checks = [
-        ("temp",  sensors["temp"], "온도(°C)"),
-        ("humi",  sensors["humi"], "습도(%)"),
-        ("soil",  sensors["soil"], "토양수분(%)"),
-        ("lux",   sensors["lux"],  "조도(lux)"),
+        ("temp", sensors["temp"], "온도(°C)"),
+        ("humi", sensors["humi"], "습도(%)"),
+        ("soil", sensors["soil"], "토양수분(%)"),
+        ("lux",  sensors["lux"],  "조도(lux)"),
     ]
 
     for key, value, label in checks:
@@ -168,7 +184,6 @@ def main():
     print(f"GreenSense 센서 모니터링 시작 — 작물: {crop}")
     print("=" * 50)
 
-    # MQTT 초기화 (추가)
     mq = mqtt.Client()
     mq.connect("localhost", 1883, 60)
 
@@ -178,22 +193,29 @@ def main():
             result  = diagnose(crop, sensors)
 
             print(f"\n[{time.strftime('%H:%M:%S')}] {crop} 상태 진단")
-            print(f"  온도:     {sensors['temp']}°C  → {result['sensors']['temp']['status']}")
-            print(f"  습도:     {sensors['humi']}%   → {result['sensors']['humi']['status']}")
-            print(f"  조도:     {sensors['lux']} lux → {result['sensors']['lux']['status']}")
-            print(f"  토양수분: {sensors['soil']}%   → {result['sensors']['soil']['status']}")
-            print(f"  가스:     {sensors['gas_ppm']} ppm → {result['sensors']['co2']['status']}")
+            print(f"  온도:          {sensors['temp']}°C  → {result['sensors']['temp']['status']}")
+            print(f"  습도:          {sensors['humi']}%   → {result['sensors']['humi']['status']}")
+            print(f"  조도:          {sensors['lux']} lux → {result['sensors']['lux']['status']}")
+            print(f"  토양수분1:     {sensors['soil1']}%")
+            print(f"  토양수분2:     {sensors['soil2']}%")
+            print(f"  토양수분 평균: {sensors['soil']}%   → {result['sensors']['soil']['status']}")
+            print(f"  가스:          {sensors['gas_ppm']} ppm → {result['sensors']['co2']['status']}")
 
             if result["alerts"]:
                 print(f"\n  ⚠️  경고:")
                 for alert in result["alerts"]:
                     print(f"     - {alert}")
-                set_alert(True)
-            else:
-                print(f"\n  ✅ 모든 항목 정상")
-                set_alert(False)
 
-            # MQTT 전송 (추가)
+            if len(result["alerts"]) >= 2:
+                set_alert(True)
+                print(f"  🔴 LED 점등 (복합 스트레스 {len(result['alerts'])}개)")
+            else:
+                set_alert(False)
+                if not result["alerts"]:
+                    print(f"\n  ✅ 모든 항목 정상")
+                else:
+                    print(f"\n  🟡 경고 1개 (LED 꺼짐)")
+
             payload = {
                 "crop":      crop,
                 "timestamp": time.strftime("%H:%M:%S"),
@@ -201,6 +223,8 @@ def main():
                 "humi":      sensors["humi"],
                 "lux":       sensors["lux"],
                 "soil":      sensors["soil"],
+                "soil1":     sensors["soil1"],
+                "soil2":     sensors["soil2"],
                 "gas_ppm":   sensors["gas_ppm"],
                 "alerts":    result["alerts"],
             }

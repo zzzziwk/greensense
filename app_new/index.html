@@ -1,0 +1,3692 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GreenSense — 스마트 채소 재배 모니터링</title>
+    <style>
+      /* --- 디자인 시스템 핵심 규격 --- */
+      :root {
+        --bg-color: #F4F6F3;
+        --card-bg: #FFFFFF;
+        --primary: #2E7D32;
+        --primary-light: #E8F5E9;
+        --alert: #C62828;
+        --text: #1A1A1A;
+        --text-muted: #666666;
+        --border: #ECEFF1;
+        --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      body {
+        background-color: var(--bg-color);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        color: var(--text);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 10px;
+      }
+
+      /* 모바일 레이아웃 고정 390px 컨테이너 */
+      .app-container {
+        width: 100%;
+        max-width: 390px;
+        height: 800px;
+        background-color: #FFFFFF;
+        border-radius: 32px;
+        box-shadow: 0 12px 36px rgba(0,0,0,0.12);
+        border: 6px solid #1A1A1A;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+      }
+
+      /* 헤더 */
+      header {
+        background-color: #FFFFFF;
+        padding: 18px 20px 14px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+        z-index: 10;
+        flex-shrink: 0;
+      }
+
+      .brand-title {
+        font-size: 19px;
+        font-weight: 800;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .brand-title svg {
+        width: 22px;
+        height: 22px;
+        fill: var(--primary);
+      }
+
+      .crop-badge {
+        background-color: var(--primary);
+        color: #FFFFFF;
+        font-size: 11.5px;
+        font-weight: 800;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: none;
+        box-shadow: 0 1px 3px rgba(46, 125, 50, 0.2);
+      }
+
+      .connection-badge {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .connection-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #9E9E9E;
+        display: inline-block;
+      }
+
+      .connection-dot.connected {
+        background-color: var(--primary);
+      }
+
+      @keyframes pulse {
+        0% { opacity: 0.3; }
+        50% { opacity: 1; }
+        100% { opacity: 0.3; }
+      }
+
+      .connection-dot.connecting {
+        background-color: #FFB300;
+        animation: pulse 1.2s infinite ease-in-out;
+      }
+
+      .connection-dot.waiting {
+        background-color: #9E9E9E;
+        animation: pulse 1.2s infinite ease-in-out;
+      }
+
+      .connection-text {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-muted);
+      }
+
+      /* 배너 스택 */
+      .banner-area {
+        padding: 10px 16px 0 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .banner-area.empty {
+        display: none !important;
+      }
+
+      .alert-banner {
+        background-color: #FFF5F5;
+        border-left: 4px solid var(--alert);
+        padding: 10px 12px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--alert);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .alert-banner svg {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        stroke: var(--alert);
+        fill: none;
+      }
+
+      .water-banner {
+        background-color: #E3F2FD;
+        border-left: 4px solid #1565C0;
+        padding: 10px 12px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #1565C0;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .water-banner svg {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        stroke: #1565C0;
+        fill: none;
+      }
+
+      /* 콘텐츠 뷰 포트 공통 */
+      .viewport-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 20px 24px 20px;
+        display: none;
+        scrollbar-width: none;
+      }
+
+      .viewport-content::-webkit-scrollbar {
+        display: none;
+      }
+
+      .viewport-content.active {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      /* 카드 그리드 */
+      .sensor-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+
+      .sensor-card {
+        background-color: var(--card-bg);
+        border-radius: 16px;
+        padding: 14px;
+        height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        box-shadow: var(--shadow);
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .sensor-card:active {
+        transform: scale(0.97);
+      }
+
+      .sensor-card-normal {
+        border-left: 4px solid var(--primary);
+      }
+
+      .sensor-card-alert {
+        border-left: 4px solid var(--alert);
+        background-color: #FFF5F5;
+      }
+
+      .sensor-card:last-child {
+        grid-column: span 2;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .sensor-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .sensor-icon {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        stroke-width: 2.5;
+        fill: none;
+      }
+
+      .sensor-card-alert .sensor-header {
+        color: var(--alert);
+      }
+
+      .sensor-card-normal .sensor-header {
+        color: var(--primary);
+      }
+
+      .value-block {
+        display: flex;
+        align-items: baseline;
+      }
+
+      .value-num {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        color: var(--text);
+        line-height: 38px;
+      }
+
+      .value-unit {
+        font-size: 14px;
+        color: #888888;
+        margin-left: 2px;
+      }
+
+      .status-text {
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .sensor-card-normal .status-text {
+        color: var(--primary);
+      }
+
+      .sensor-card-alert .status-text {
+        color: var(--alert);
+      }
+
+      /* CO2 구조 전용 정렬 */
+      .co2-left {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+      }
+
+      .co2-right {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        height: 100%;
+      }
+
+      .update-time {
+        text-align: center;
+        font-size: 11px;
+        color: #888888;
+        font-weight: 500;
+        margin-top: 4px;
+      }
+
+      /* 공통 타이틀 */
+      .section-nav-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--text);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      /* 탭 2: 진단 스타일 */
+      .diagnose-tag-row {
+        background-color: var(--primary-light);
+        padding: 8px 14px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--primary);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .action-btn {
+        background-color: var(--primary);
+        color: #FFFFFF;
+        border: none;
+        border-radius: 12px;
+        padding: 14px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        transition: background-color 0.15s ease;
+      }
+
+      .action-btn:active {
+        opacity: 0.9;
+      }
+
+      .spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #FFFFFF;
+        animation: spin 0.8s linear infinite;
+        display: none;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .diagnose-result {
+        background-color: var(--primary-light);
+        border: 1.5px solid var(--primary);
+        border-radius: 16px;
+        padding: 16px;
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .diag-block {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .diag-lbl {
+        font-size: 11px;
+        color: var(--primary);
+        font-weight: 700;
+      }
+
+      .diag-val {
+        font-size: 13px;
+        line-height: 1.5;
+        font-weight: 500;
+      }
+
+      .toggle-wrap {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #FAFBF9;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+      }
+
+      .toggle-label-sec {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .toggle-switch-input {
+        display: none;
+      }
+
+      .toggle-switch-lbl {
+        width: 44px;
+        height: 24px;
+        background-color: #CFD8DC;
+        border-radius: 12px;
+        position: relative;
+        cursor: pointer;
+        display: inline-block;
+        transition: background-color 0.2s ease;
+      }
+
+      .toggle-switch-lbl::after {
+        content: '';
+        width: 18px;
+        height: 18px;
+        background-color: #FFFFFF;
+        border-radius: 50%;
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        transition: transform 0.2s ease;
+      }
+
+      .toggle-switch-input:checked + .toggle-switch-lbl {
+        background-color: var(--primary);
+      }
+
+      .toggle-switch-input:checked + .toggle-switch-lbl::after {
+        transform: translateX(20px);
+      }
+
+      /* 아코디언 */
+      .accordion-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .accordion-item {
+        background-color: #FFFFFF;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .accordion-header {
+        padding: 12px;
+        background-color: #FAFBF9;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .accordion-body {
+        padding: 12px;
+        font-size: 13px;
+        color: var(--text-muted);
+        line-height: 1.5;
+        border-top: 1px solid var(--border);
+        display: none;
+      }
+
+      /* 탭 3: 기록 */
+      .filter-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .filter-btn {
+        flex: 1;
+        background-color: #FAFBF9;
+        border: 1px solid var(--border);
+        padding: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        border-radius: 10px;
+        cursor: pointer;
+        color: var(--text-muted);
+        transition: all 0.15s ease;
+      }
+
+      .filter-btn.active {
+        background-color: var(--primary);
+        color: #FFFFFF;
+        border-color: var(--primary);
+      }
+
+      .history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .history-card {
+        background-color: #FFFFFF;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        cursor: pointer;
+        transition: transform 0.1s ease;
+      }
+
+      .history-card:active {
+        transform: scale(0.98);
+      }
+
+      .history-card-alert {
+        border-color: var(--alert);
+        background-color: #FFF8F8;
+      }
+
+      .history-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .history-crop {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--primary);
+      }
+
+      .history-time {
+        font-size: 11px;
+        color: #888888;
+        font-weight: 500;
+      }
+
+      .badge {
+        font-size: 10px;
+        font-weight: 700;
+        background-color: var(--alert);
+        color: #FFFFFF;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+
+      .history-summary {
+        font-size: 12px;
+        color: var(--text-muted);
+        display: flex;
+        gap: 8px;
+      }
+
+      .history-sum-item {
+        background-color: #F5F5F5;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .history-summary strong.alert-hl {
+        color: var(--alert);
+      }
+
+      /* 탭 4: 리포트 */
+      /* 수확 예측 카드 스타일 */
+      .harvest-card {
+        background: linear-gradient(135deg, #E8F5E9 0%, #FFFFFF 100%);
+        border: 1px solid rgba(46, 125, 50, 0.15);
+        border-radius: 16px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        box-shadow: var(--shadow);
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .harvest-card-top {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--primary);
+        letter-spacing: -0.3px;
+      }
+
+      .harvest-card-days {
+        font-size: 64px;
+        font-weight: 800;
+        color: var(--primary);
+        line-height: 1;
+        margin: 4px 0;
+      }
+
+      .harvest-card-date {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-muted);
+        margin-bottom: 8px;
+      }
+
+      .harvest-progress-container {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 4px;
+      }
+
+      .harvest-progress-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-align: left;
+      }
+
+      .harvest-progress-bar-bg {
+        width: 100%;
+        height: 8px;
+        background-color: #E0E0E0;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .harvest-progress-bar-fill {
+        height: 100%;
+        background-color: var(--primary);
+        border-radius: 4px;
+        width: 0%;
+        transition: width 0.5s ease-out;
+      }
+
+      .harvest-card-footer {
+        font-size: 10px;
+        color: #888888;
+        font-weight: 500;
+        margin-top: 4px;
+      }
+
+      .stats-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .report-number-card {
+        background-color: var(--primary-light);
+        border: 1px solid rgba(46, 125, 50, 0.2);
+        border-radius: 12px;
+        padding: 10px 6px;
+        text-align: center;
+      }
+
+      .report-card-lbl {
+        font-size: 10px;
+        color: var(--primary);
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+
+      .report-card-num {
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .report-big-alert-box {
+        background-color: #FFF3E0;
+        border: 1px solid #FFE0B2;
+        border-radius: 12px;
+        padding: 12px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .report-alert-text {
+        font-size: 12px;
+        font-weight: 700;
+        color: #E65100;
+      }
+
+      .report-alert-count {
+        font-size: 20px;
+        font-weight: 800;
+        color: #E65100;
+      }
+
+      .graph-container {
+        background-color: #FFFFFF;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .svg-canvas-wrap {
+        width: 100%;
+        height: 60px;
+        display: block;
+      }
+
+      .graph-title {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-muted);
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .eval-card {
+        border-radius: 14px;
+        padding: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      /* 탭 5: 설정 */
+      .setting-card {
+        background-color: #FAFBF9;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .setting-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .setting-lbl {
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .setting-desc {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: -4px;
+      }
+
+      .crop-btn-row {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 4px;
+      }
+
+      .crop-select-btn {
+        background-color: #FFFFFF;
+        border: 1.5px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 2px;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        color: var(--text-muted);
+        text-align: center;
+        transition: all 0.15s ease;
+      }
+
+      .crop-select-btn.active {
+        background-color: var(--primary);
+        color: #FFFFFF;
+        border-color: var(--primary);
+      }
+
+      .slider-input {
+        -webkit-appearance: none;
+        width: 100%;
+        height: 6px;
+        background: #E0E0E0;
+        border-radius: 3px;
+        outline: none;
+      }
+
+      .slider-input::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        background-color: var(--primary);
+        border-radius: 50%;
+        cursor: pointer;
+      }
+
+      .api-status-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+
+      .api-input-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .api-pass-field {
+        width: 100%;
+        padding: 10px;
+        border: 1.5px solid var(--border);
+        border-radius: 8px;
+        font-size: 12px;
+        font-family: inherit;
+        outline: none;
+      }
+
+      .api-btn-group {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .api-text-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 11px;
+        text-decoration: underline;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      /* 탭바 */
+      nav.tab-bar {
+        height: 64px;
+        background-color: #FFFFFF;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        flex-shrink: 0;
+        z-index: 10;
+      }
+
+      .tab-btn {
+        flex: 1;
+        height: 100%;
+        background: none;
+        border: none;
+        color: #9E9E9E;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 3px;
+      }
+
+      .tab-btn svg {
+        width: 22px;
+        height: 22px;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        fill: none;
+      }
+
+      .tab-btn.active {
+        color: var(--primary);
+        font-weight: 700;
+      }
+
+      /* 챗봇 스타일 */
+      .chat-bubble-wrapper {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        margin-bottom: 4px;
+      }
+      .chat-bubble-wrapper.user {
+        align-items: flex-end;
+      }
+      .chat-bubble-wrapper.claude {
+        align-items: flex-start;
+      }
+      .chat-bubble {
+        max-width: 82%;
+        padding: 10px 14px;
+        font-size: 13px;
+        line-height: 1.45;
+        font-weight: 500;
+        letter-spacing: -0.2px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      }
+      .chat-bubble.user {
+        background-color: var(--primary);
+        color: #FFFFFF;
+        border-radius: 16px 16px 0px 16px;
+      }
+      .chat-bubble.claude {
+        background-color: #FAFBF9;
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 16px 16px 16px 0px;
+      }
+      .chat-bubble.loading-bubble {
+        background-color: #EEEEEE;
+        color: var(--text-muted);
+        border-radius: 16px 16px 16px 0px;
+        font-style: italic;
+      }
+      .chat-bubble-time {
+        font-size: 9px;
+        color: #9E9E9E;
+        font-weight: 600;
+        margin-top: 3px;
+      }
+
+      /* 팝업 모달 */
+      .modal-dimmed {
+        display: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.4);
+        z-index: 2000;
+        align-items: flex-end;
+      }
+
+      .slide-popup {
+        width: 100%;
+        background-color: #FFFFFF;
+        border-top-left-radius: 24px;
+        border-top-right-radius: 24px;
+        padding: 20px;
+        box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+        transform: translateY(100%);
+        transition: transform 0.25s cubic-bezier(0.1, 0.76, 0.55, 0.94);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .modal-dimmed.active {
+        display: flex;
+      }
+
+      .modal-dimmed.active .slide-popup {
+        transform: translateY(0);
+      }
+
+      .popup-title {
+        font-size: 15px;
+        font-weight: 800;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .popup-close-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 18px;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .popup-table {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      .popup-row {
+        display: flex;
+        justify-content: space-between;
+        padding-bottom: 6px;
+        border-bottom: 1.5px solid var(--border);
+      }
+
+      .popup-lbl {
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+
+      .popup-val {
+        font-weight: 700;
+      }
+
+      .popup-guide {
+        background-color: var(--primary-light);
+        color: var(--primary);
+        padding: 12px;
+        border-radius: 10px;
+        font-size: 12.5px;
+        font-weight: 600;
+        line-height: 1.45;
+      }
+
+      /* 우측 상단 작은 빨간 "!" 뱃지 */
+      .sensor-card-alert {
+        position: relative;
+      }
+      .sensor-card-alert::after {
+        content: '!';
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: var(--alert);
+        color: #FFFFFF;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        font-size: 10.5px;
+        font-weight: 900;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 1.5px 3.5px rgba(211, 47, 47, 0.45);
+        z-index: 10;
+      }
+
+      /* 수치 범위 가이드 스타일 */
+      .range-text {
+        font-size: 11px;
+        color: #aaaaaa;
+        font-weight: 500;
+        margin-top: 3.5px;
+      }
+
+      /* 상태 요약 배너 */
+      #home-summary-banner {
+        height: 52px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        gap: 8px;
+        margin-top: 4px;
+        margin-bottom: 12px;
+        padding: 0 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        transition: all 0.2s ease;
+      }
+
+      /* --- 다크 모드 스타일 정의 --- */
+      body.dark-mode {
+        --bg-color: #121212 !important;
+        --card-bg: #2A2A2A !important;
+        --text: #F0F0F0 !important;
+        --text-muted: #A0A0A0 !important;
+        --border: #3A3A3A !important;
+        --primary-light: #1E3E20 !important;
+      }
+
+      body.dark-mode .app-container {
+        background-color: #1A1A1A !important;
+        border-color: #2D2D2D !important;
+        box-shadow: 0 12px 36px rgba(0,0,0,0.4) !important;
+      }
+
+      body.dark-mode header,
+      body.dark-mode nav.tab-bar {
+        background-color: #1A1A1A !important;
+        border-color: #3A3A3A !important;
+      }
+
+      body.dark-mode .brand-title {
+        color: #F0F0F0 !important;
+      }
+
+      body.dark-mode .tab-btn span {
+        color: #A0A0A0 !important;
+      }
+
+      body.dark-mode .tab-btn.active span {
+        color: #4CAF50 !important;
+      }
+
+      body.dark-mode .tab-btn.active svg {
+        stroke: #4CAF50 !important;
+      }
+
+      /* Viewports */
+      body.dark-mode .viewport-content {
+        background-color: #1A1A1A !important;
+      }
+
+      body.dark-mode .setting-card,
+      body.dark-mode .sensor-card,
+      body.dark-mode .history-card,
+      body.dark-mode .watering-info-card,
+      body.dark-mode .harvest-info-card,
+      body.dark-mode .diagnose-card,
+      body.dark-mode .help-card,
+      body.dark-mode .eval-card,
+      body.dark-mode .graph-container {
+        background-color: #2A2A2A !important;
+        color: #F0F0F0 !important;
+        border-color: #3A3A3A !important;
+      }
+
+      /* Home Cards explicitly overriding white background */
+      body.dark-mode #home-monitoring-card,
+      body.dark-mode #home-speech-bubble,
+      body.dark-mode #home-watering-card,
+      body.dark-mode #home-harvest-card {
+        background-color: #2A2A2A !important;
+        border-color: #3A3A3A !important;
+        color: #F0F0F0 !important;
+      }
+
+      body.dark-mode #home-speech-bubble-tail {
+        background-color: #2A2A2A !important;
+        border-right-color: var(--primary) !important;
+        border-bottom-color: var(--primary) !important;
+      }
+
+      body.dark-mode #vegetable-speech-bubble {
+        color: #F0F0F0 !important;
+      }
+
+      /* Data Reset card in Dark mode */
+      body.dark-mode #data-reset-card {
+        border-color: #5D1919 !important;
+        background-color: #2D1414 !important;
+      }
+      body.dark-mode #data-reset-card div {
+        color: #FF8A80 !important;
+      }
+      body.dark-mode #data-reset-desc {
+        color: #E2B6B6 !important;
+      }
+      body.dark-mode #data-reset-card button {
+        background-color: #2A1010 !important;
+        color: #FF5252 !important;
+        border-color: #FF5252 !important;
+      }
+
+      /* Inputs, Textareas, and Selects */
+      body.dark-mode input,
+      body.dark-mode textarea,
+      body.dark-mode select {
+        background-color: #1A1A1A !important;
+        color: #F0F0F0 !important;
+        border-color: #3A3A3A !important;
+      }
+
+      body.dark-mode .section-nav-title {
+        color: #F0F0F0 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- 헤더 -->
+      <header style="position: relative;">
+        <div class="brand-title">
+          <svg viewBox="0 0 24 24" style="fill: none; stroke: var(--primary); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;">
+            <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.4 21 3c-1 4-2 6.5-3.1 11.8A7 7 0 0 1 11 20z" fill="rgba(46, 125, 50, 0.15)"></path>
+            <path d="M9 22c2-3 4-4 6-7"></path>
+          </svg>
+          <span>GreenSense</span>
+          <span id="hdr-crop-badge" class="crop-badge">상추</span>
+        </div>
+        <div class="connection-badge" style="display: flex; align-items: center; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span id="conn-dot" class="connection-dot connecting"></span>
+            <span id="conn-text" class="connection-text">연결중</span>
+          </div>
+          <!-- 알림벨 아이콘 버튼 -->
+          <button id="alert-bell-btn" onclick="toggleAlertDropdown(event)" style="background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; display: flex; align-items: center; position: relative;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke: var(--text-muted);">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span id="bell-badge-dot" style="position: absolute; top: 1px; right: 1px; width: 6px; height: 6px; background-color: var(--alert); border-radius: 50%; display: none;"></span>
+          </button>
+          
+          <!-- 알림벨 드롭다운 박스 -->
+          <div id="alert-bell-dropdown" style="display: none; position: absolute; top: 48px; right: 16px; width: 200px; background-color: #FFFFFF; border: 1.5px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.12); border-radius: 12px; padding: 12px; z-index: 1000; flex-direction: column; gap: 6px;" onclick="event.stopPropagation()">
+            <div style="font-size: 11.5px; font-weight: 800; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 4px; color: var(--text); text-align: left;">실시간 경고 사항</div>
+            <div id="alert-bell-list" style="font-size: 11.5px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; text-align: left;">
+              현재 경고 없음 ✓
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- ============================================== -->
+      <!-- TAB 1: 홈 -->
+      <!-- ============================================== -->
+      <div id="tab-home" class="viewport-content active" style="flex-direction: column; gap: 12px;">
+        <!-- 작물 지정 알림판 -->
+        <div id="home-monitoring-card" style="display: flex; justify-content: space-between; align-items: center; background-color: #FFFFFF; border: 1.5px solid var(--border); padding: 8px 12px; border-radius: 12px; margin-bottom: 2px;">
+          <span style="font-size: 11.5px; font-weight: 800; color: var(--text-muted);">모니터링 작물</span>
+          <span id="home-crop-badge" class="crop-badge" style="font-size: 11px; margin: 0; padding: 3px 10px;">상추</span>
+        </div>
+        
+        <!-- 말풍선 (캐릭터 옆/위) -->
+        <div id="home-speech-bubble" style="position: relative; background: #FFFFFF; border: 2.5px solid var(--primary); border-radius: 16px; padding: 12px 14px; margin: 8px auto 10px auto; width: 100%; max-width: 280px; text-align: center; box-shadow: var(--shadow); z-index: 5;">
+          <span id="vegetable-speech-bubble" style="font-size: 13px; font-weight: 800; color: #111111; line-height: 1.45;">
+            오늘도 잘 자라고 있어요! 기분이 좋아요 😊
+          </span>
+          <!-- 말풍선 꼬리 (꼭짓점 아래쪽/중앙) -->
+          <div id="home-speech-bubble-tail" style="position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 12px; height: 12px; background: #FFFFFF; border-right: 2.5px solid var(--primary); border-bottom: 2.5px solid var(--primary); z-index: 6;"></div>
+        </div>
+
+        <!-- 캐릭터 구역 (중앙 배치, 너비 60%) -->
+        <div id="vegetable-avatar-container" style="width: 60%; max-width: 180px; margin: 0 auto; display: flex; justify-content: center; align-items: center; aspect-ratio: 1/1;">
+          <!-- SVG 삽입됨 -->
+        </div>
+
+        <!-- 작물명 표시 -->
+        <div style="font-size: 15px; font-weight: 800; color: var(--text); text-align: center; margin: 4px 0 8px 0;">
+          🌱 <span id="home-crop-name-label" style="color: var(--primary); font-size: 17px; font-weight: 900;">상추</span>
+        </div>
+
+        <!-- 물주기 정보 카드 -->
+        <div class="watering-info-card" id="home-watering-card" style="background-color: #FFFFFF; border: 1.5px solid var(--border); border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); transition: all 0.3s ease;">
+          <div style="font-size: 11px; font-weight: 800; color: #555555; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">물주기 정보</div>
+          <div id="home-watering-content">
+            <div style="display: flex; align-items: center; justify-content: center; height: 40px;">
+              <span class="spinner" style="display: inline-block;"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 수확 예측 카드 -->
+        <div class="harvest-info-card" id="home-harvest-card" style="background-color: #FFFFFF; border: 1.5px solid var(--border); border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); margin-bottom: 8px;">
+          <div style="font-size: 11px; font-weight: 800; color: #555555; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">수확 예측</div>
+          <div id="home-harvest-content">
+            <div style="display: flex; align-items: center; justify-content: center; height: 40px;">
+              <span class="spinner" style="display: inline-block;"></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: right; font-size: 10px; color: var(--text-muted); font-weight: 700; margin-top: -6px;" id="home-update-elapsed">
+          방금 전 갱신
+        </div>
+        <div id="last-update" class="update-time" style="margin-top: -8px; text-align: right; margin-bottom: 4px;">마지막 업데이트: --:--:--</div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- TAB 2: 진단 -->
+      <!-- ============================================== -->
+      <div id="tab-diagnose" class="viewport-content">
+        <div class="section-nav-title">실시간 기기 및 작물 인공지능 진단</div>
+
+        <!-- 작물 선택 (필수) 섹션 추가 -->
+        <div class="setting-card" style="padding: 12px; margin-bottom: 8px; gap: 6px;">
+          <div style="font-size: 11px; font-weight: 800; color: var(--primary);">작물 선택 (필수)</div>
+          <div class="crop-btn-row">
+            <button class="crop-select-btn active" id="btn-diag-crop-상추" onclick="triggerDiagCropChange('상추')">상추</button>
+            <button class="crop-select-btn" id="btn-diag-crop-깻잎" onclick="triggerDiagCropChange('깻잎')">깻잎</button>
+            <button class="crop-select-btn" id="btn-diag-crop-대파" onclick="triggerDiagCropChange('대파')">대파</button>
+            <button class="crop-select-btn" id="btn-diag-crop-시금치" onclick="triggerDiagCropChange('시금치')">시금치</button>
+            <button class="crop-select-btn" id="btn-diag-crop-청경채" onclick="triggerDiagCropChange('청경채')">청경채</button>
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center; width: 100%;">
+            <button class="crop-select-btn" id="btn-diag-crop-custom" onclick="toggleDiagCustomCropInput()" style="flex: inherit; padding: 6px 12px; font-size: 11px; white-space: nowrap;">직접 입력</button>
+            <input type="text" id="diag-custom-crop-input" placeholder="작물명 직접 입력" style="display: none; flex: 1; padding: 6px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 11px; outline: none; min-width: 0;" onkeydown="handleCustomCropKey(event)" />
+            <button id="btn-diag-custom-save" onclick="saveCustomCropDirect()" style="display: none; padding: 6px 10px; background-color: var(--primary); color: #FFFFFF; border-radius: 8px; font-size: 11px; font-weight: 700; border: none; cursor: pointer; white-space: nowrap;">확인</button>
+          </div>
+        </div>
+
+        <div class="diagnose-tag-row">
+          <span>선택 작물 기준 진단</span>
+          <span id="diagnose-crop-lbl" style="font-weight: 800;">상추</span>
+        </div>
+
+        <!-- 자동 진단 트리거 -->
+        <div class="toggle-wrap">
+          <div class="toggle-label-sec">
+            <span style="font-size: 13px; font-weight: 700;">실시간 자동 진단</span>
+            <span style="font-size: 11px; color: var(--text-muted);">5분마다 진단 API를 자동 호출합니다.</span>
+          </div>
+          <div>
+            <input type="checkbox" id="auto-diag-toggle" class="toggle-switch-input" onchange="toggleAutoDiagnose(this.checked)">
+            <label for="auto-diag-toggle" class="toggle-switch-lbl"></label>
+          </div>
+        </div>
+
+        <button class="action-btn" id="diagnose-btn" onclick="requestDiagnose()">
+          <span class="spinner" id="diagnose-spinner"></span>
+          <span>즉시 AI 정밀 진단 요청</span>
+        </button>
+
+        <div id="diag-time-stamp" style="font-size: 11px; color: var(--text-muted); text-align: center; font-weight: 600; margin-top: -8px; display: none;">
+          마지막 진단: --:--:--
+        </div>
+
+        <!-- 실시간 진단 결과 카드 -->
+        <div class="diagnose-result" id="diagnose-result-card">
+          <div class="diag-block">
+            <span class="diag-lbl">① 상태 요약</span>
+            <span class="diag-val" id="diag-summary">정상 작동 중입니다.</span>
+          </div>
+          <div class="diag-block">
+            <span class="diag-lbl">② 위해/문제점 요소</span>
+            <span class="diag-val" id="diag-problems">특이 사항 없음.</span>
+          </div>
+          <div class="diag-block">
+            <span class="diag-lbl">③ 추천 조치 사항</span>
+            <span class="diag-val" id="diag-solutions">현 환경을 유지하십시오.</span>
+          </div>
+        </div>
+
+        <!-- 최근 진단 이력 -->
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-muted);">이전 진단 이력 (아코디언 클릭 시 펼침)</div>
+          <div class="accordion-container" id="diagnose-history-acc">
+            <!-- 동적 아코디언 추가됨 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- TAB 2.5: 챗봇 -->
+      <!-- ============================================== -->
+      <div id="tab-chatbot" class="viewport-content" style="display: none; flex-direction: column; height: 100%; justify-content: space-between;">
+        <div class="chatbot-header" style="margin-bottom: 2px; flex-shrink: 0;">
+          <div class="section-nav-title" style="margin-bottom: 2px;">채소 상담 챗봇</div>
+          <div style="font-size: 11px; color: var(--text-muted); font-weight: 700;">Claude API · 센서 이력 연동</div>
+        </div>
+
+        <!-- 스크롤 가능한 채팅 영역 -->
+        <div class="chat-area" id="chat-messages-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 8px 0; margin-bottom: 8px;">
+          <!-- 동적 메시지 버블이 들어갈 곳 -->
+        </div>
+
+        <!-- 하단 입력창 -->
+        <div class="chat-input-row" style="display: flex; gap: 6px; padding: 10px 0; border-top: 1px solid var(--border); align-items: center; flex-shrink: 0;">
+          <input type="text" id="chat-input-field" placeholder="채소 재배 질문을 입력하세요..." style="flex: 1; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 20px; font-size: 13px; outline: none; min-width: 0;" onkeydown="handleChatInputKey(event)" />
+          <button onclick="sendChatMessage()" style="width: 38px; height: 38px; border-radius: 50%; background-color: var(--primary); display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; color: #FFFFFF; flex-shrink: 0; box-shadow: 0 2px 6px rgba(46, 125, 50, 0.2);">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- TAB 3: 기록 -->
+      <!-- ============================================== -->
+      <div id="tab-history" class="viewport-content" style="flex-direction: column; gap: 12px;">
+        <div class="section-nav-title" style="margin-bottom: 2px; width: 100%; display: flex; justify-content: space-between; align-items: center;">
+          <span>실시간 생육 수신 기록</span>
+          <button class="api-text-btn" style="text-decoration: none;" onclick="loadHistoryData()">새로고침 ↻</button>
+        </div>
+
+        <!-- 1. 연결 상태 + 경고 배너 -->
+        <div class="history-status-header" style="background-color: #F9F9F9; border-radius: 12px; padding: 12px 14px; margin-bottom: 4px; border: 1.5px solid var(--border); display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 11.5px; font-weight: 800; color: var(--text-muted);">기기 연결 상태</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span id="conn-dot-history" class="connection-dot connecting"></span>
+              <span id="conn-text-history" class="connection-text" style="font-size: 11px; font-weight: 800; color: var(--text-muted);">연결중</span>
+            </div>
+          </div>
+          <div id="history-alerts-container" style="display: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px;">
+            <!-- 실시간 경고 사항이 여기에 표시됩니다 -->
+          </div>
+        </div>
+
+        <!-- 2. 센서 카드 5개 (기존 홈 디자인 그대로) -->
+        <div class="sensor-grid" style="margin-bottom: 4px;">
+          <!-- 온도 -->
+          <div class="sensor-card sensor-card-normal" onclick="openSensorPopup('temp')">
+            <div class="sensor-header">
+              <svg class="sensor-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+              </svg>
+              <span>온도</span>
+            </div>
+            <div class="value-block">
+              <span id="v-temp" class="value-num">--.-</span>
+              <span class="value-unit">°C</span>
+            </div>
+            <div id="status-temp" class="status-text">--</div>
+            <div id="range-temp" class="range-text">정상범위 -- ~ --°C</div>
+          </div>
+
+          <!-- 습도 -->
+          <div class="sensor-card sensor-card-normal" onclick="openSensorPopup('humi')">
+            <div class="sensor-header">
+              <svg class="sensor-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-13-7-13S5 10.7 5 15a7 7 0 0 0 7 7z" />
+              </svg>
+              <span>습도</span>
+            </div>
+            <div class="value-block">
+              <span id="v-humi" class="value-num">--</span>
+              <span class="value-unit">%</span>
+            </div>
+            <div id="status-humi" class="status-text">--</div>
+            <div id="range-humi" class="range-text">정상범위 -- ~ --%</div>
+          </div>
+
+          <!-- 토양수분 -->
+          <div class="sensor-card sensor-card-normal" onclick="openSensorPopup('soil')">
+            <div class="sensor-header">
+              <svg class="sensor-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22V12" />
+                <path d="M12 12c-2-2.67-4-2.67-6 0M12 14c2-2.67 4-2.67 6 0" />
+                <path d="M12 12a5 5 0 0 1 5-5h4M12 12a5 5 0 0 0-5-5H3" />
+              </svg>
+              <span>토양수분</span>
+            </div>
+            <div class="value-block">
+              <span id="v-soil" class="value-num">--.-</span>
+              <span class="value-unit">%</span>
+            </div>
+            <div id="status-soil" class="status-text">--</div>
+            <div id="range-soil" class="range-text">정상범위 -- ~ --%</div>
+          </div>
+
+          <!-- 조도 -->
+          <div class="sensor-card sensor-card-normal" onclick="openSensorPopup('lux')">
+            <div class="sensor-header">
+              <svg class="sensor-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+              </svg>
+              <span>조도</span>
+            </div>
+            <div class="value-block">
+              <span id="v-lux" class="value-num">---</span>
+              <span class="value-unit">lux</span>
+            </div>
+            <div id="status-lux" class="status-text">--</div>
+            <div id="range-lux" class="range-text">정상범위 -- ~ --lux</div>
+          </div>
+
+          <!-- CO2 -->
+          <div class="sensor-card sensor-card-normal" onclick="openSensorPopup('gas')">
+            <div class="co2-left">
+              <div class="sensor-header">
+                <svg class="sensor-icon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
+                </svg>
+                <span>CO₂ 농도</span>
+              </div>
+              <div id="status-gas" class="status-text">--</div>
+              <div id="range-gas" class="range-text">정상범위 -- ~ --ppm</div>
+            </div>
+            <div class="co2-right">
+              <div class="value-block">
+                <span id="v-gas" class="value-num">----</span>
+                <span class="value-unit">ppm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. 기존 이력 리스트 (날짜별 필터, 경고만 보기 등 기존 기능 유지) -->
+        <!-- 필터 버튼 -->
+        <div class="filter-row">
+          <button class="filter-btn active" id="filter-all-btn" onclick="setHistoryFilter('all')">전체 보기</button>
+          <button class="filter-btn" id="filter-warn-btn" onclick="setHistoryFilter('warn')">경고만 보기</button>
+        </div>
+
+        <!-- 이력 스크롤 스택 -->
+        <div id="history-container" class="history-list">
+          <!-- 시간순 이력 꽂힘 -->
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- TAB 4: 리포트 -->
+      <!-- ============================================== -->
+      <div id="tab-report" class="viewport-content">
+        <div class="section-nav-title">생육 리포트 및 지표 평가</div>
+
+        <!-- 수확 예측 카드 -->
+        <div class="harvest-card" id="harvest-prediction-card">
+          <div class="harvest-card-top">예상 수확까지</div>
+          <div class="harvest-card-days" id="harvest-remaining-days">--일</div>
+          <div class="harvest-card-date" id="harvest-date">----년 --월 --일</div>
+          
+          <div class="harvest-progress-container">
+            <div class="harvest-progress-label" id="harvest-progress-lbl">생장 달성률 0.0% (0.0 / 480 GDD)</div>
+            <div class="harvest-progress-bar-bg">
+              <div class="harvest-progress-bar-fill" id="harvest-progress-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+          
+          <div class="harvest-card-footer">
+            누적 온도 기반 GDD 예측 모델 (FAO-56 수분스트레스 보정)
+          </div>
+        </div>
+
+        <!-- 3대 주요 통계 미들 -->
+        <div class="stats-summary-grid">
+          <div class="report-number-card">
+            <div class="report-card-lbl">평균 온도</div>
+            <div id="rep-avg-temp" class="report-card-num">--.- °C</div>
+          </div>
+          <div class="report-number-card">
+            <div class="report-card-lbl">평균 습도</div>
+            <div id="rep-avg-humi" class="report-card-num">-- %</div>
+          </div>
+          <div class="report-number-card">
+            <div class="report-card-lbl">평균 수분</div>
+            <div id="rep-avg-soil" class="report-card-num">--.- %</div>
+          </div>
+        </div>
+
+        <!-- AI 진단 횟수 카드 및 한줄 요약 카드 추가 -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div class="report-number-card" style="background-color: #E8F5E9; border: 1px solid rgba(46, 125, 50, 0.15);">
+            <div class="report-card-lbl" style="color: var(--primary);">AI 진단 횟수</div>
+            <div id="rep-ai-diag-count" class="report-card-num" style="color: var(--primary);">0회</div>
+          </div>
+          <div class="report-number-card" style="background-color: #F4F6F3; border: 1px solid var(--border);">
+            <div class="report-card-lbl" style="color: var(--text-muted); font-size: 11px;">종합 분석 상태</div>
+            <div id="rep-ai-status-label" class="report-card-num" style="color: var(--text); font-size: 14px;">대기 중</div>
+          </div>
+        </div>
+
+        <div class="setting-card" style="background-color: #FFFFFF; border: 1.5px dashed var(--primary); padding: 12px; gap: 4px; display: flex; flex-direction: column;">
+          <span style="font-size: 11px; font-weight: 800; color: var(--primary);">Claude AI 한줄 요약</span>
+          <div id="rep-claude-summary" style="font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.45;">
+            아직 진단 이력이 없습니다.
+          </div>
+        </div>
+
+        <!-- 누적 경고 카운트 -->
+        <div class="report-big-alert-box">
+          <span class="report-alert-text">총 경고 검출 횟수</span>
+          <span id="rep-total-alerts" class="report-alert-count">0회</span>
+        </div>
+
+        <!-- 빈발 위해 경고 TOP 3 요인 -->
+        <div class="setting-card">
+          <span class="setting-lbl" style="color: #D84315;">경고 빈발 요인 TOP 3</span>
+          <div id="rep-danger-causes" style="font-size: 12.5px; line-height: 1.6; font-weight: 600;">
+            기록을 로딩 중입니다...
+          </div>
+        </div>
+
+        <!-- 20회 미니 차트 SVG 드로잉 -->
+        <div class="graph-container">
+          <div class="graph-title">
+            <span>온도 추이 (최근 20회)</span>
+            <span id="graph-temp-legend" style="color:var(--primary);">--.-°C</span>
+          </div>
+          <svg class="svg-canvas-wrap" id="svg-graph-temp"></svg>
+
+          <div class="graph-title">
+            <span>습도 추이 (최근 20회)</span>
+            <span id="graph-humi-legend" style="color:#00796B;">--%</span>
+          </div>
+          <svg class="svg-canvas-wrap" id="svg-graph-humi"></svg>
+
+          <div class="graph-title">
+            <span>토양 습윤 추이 (최근 20회)</span>
+            <span id="graph-soil-legend" style="color:#1565C0;">--.-%</span>
+          </div>
+          <svg class="svg-canvas-wrap" id="svg-graph-soil"></svg>
+        </div>
+
+        <!-- 종합 점수 평가 등급 -->
+        <div class="eval-card" id="rep-eval-card" style="background-color: #F0F9EB; border: 1.5px solid #C2E7B0;">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: 700;">생육 상태 종합 평가</span>
+            <span id="rep-eval-score" style="font-size: 18px; font-weight: 800; color: var(--primary);">매우 좋음</span>
+            <span id="rep-eval-desc" style="font-size: 12px; font-weight: 500; line-height: 1.45; color: var(--text-muted);">
+              관수 제어와 조도가 채소 생육 표준 대역을 부드럽게 지키고 있습니다. 이대로만 유지해주십시오.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- TAB 5: 설정 -->
+      <!-- ============================================== -->
+      <div id="tab-settings" class="viewport-content" style="flex-direction: column; gap: 12px;">
+        <div class="section-nav-title">GreenSense 시스템 제어 및 설정</div>
+
+        <!-- 작물 지정 섹션 -->
+        <div class="setting-card">
+          <div class="setting-row">
+            <span class="setting-lbl">작물 변경 제어</span>
+          </div>
+          <div class="crop-btn-row">
+            <button class="crop-select-btn active" id="btn-crop-상추" onclick="triggerCropChange('상추')">상추</button>
+            <button class="crop-select-btn" id="btn-crop-깻잎" onclick="triggerCropChange('깻잎')">깻잎</button>
+            <button class="crop-select-btn" id="btn-crop-대파" onclick="triggerCropChange('대파')">대파</button>
+            <button class="crop-select-btn" id="btn-crop-시금치" onclick="triggerCropChange('시금치')">시금치</button>
+            <button class="crop-select-btn" id="btn-crop-청경채" onclick="triggerCropChange('청경채')">청경채</button>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; margin-top: 2px;" id="crop-change-history-lbl">
+            마지막 변경: 이력 없음
+          </div>
+        </div>
+
+        <!-- [1. 작물 정보 카드] -->
+        <div class="setting-card" id="crop-reference-card">
+          <span id="ref-crop-title" class="setting-lbl" style="font-weight: 800; color: var(--primary);">상추 재배 기준 정보</span>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11.5px; text-align: left; margin-top: 4px;">
+            <thead>
+              <tr style="border-bottom: 1.5px solid var(--border); color: var(--text-muted); font-weight: 700;">
+                <th style="padding: 6px 4px;">환경 요소</th>
+                <th style="padding: 6px 4px; text-align: right;">정상 기준 범위</th>
+              </tr>
+            </thead>
+            <tbody id="ref-crop-table-body">
+              <!-- JS에서 동적 바인딩 -->
+            </tbody>
+          </table>
+          <div style="font-size: 10px; color: var(--text-muted); font-weight: 700; text-align: right; margin-top: 4px; opacity: 0.8;">
+            베란다 실내 재배 환경 기준 (논문 근거 기반)
+          </div>
+        </div>
+
+        <!-- [알림 권한 설정] -->
+        <div class="setting-card" id="push-notification-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div style="display: flex; flex-direction: column; gap: 3px;">
+              <span class="setting-lbl" style="font-weight: 800;">푸시 알림</span>
+              <span style="color: var(--text-muted); font-size: 11px; font-weight: 700; line-height: 1.45; max-width: 210px;">
+                토양수분 부족이나 CO₂ 위험 상태일 때 브라우저 알림을 받습니다
+              </span>
+            </div>
+            <div style="display: flex; gap: 4px; background-color: var(--border); padding: 3px; border-radius: 8px;">
+              <button id="btn-push-on" onclick="togglePushNotifications(true)" class="filter-btn" style="margin:0; padding: 4.5px 11px; font-size: 11.5px; border-radius: 6px; font-weight: 800; cursor: pointer;">ON</button>
+              <button id="btn-push-off" onclick="togglePushNotifications(false)" class="filter-btn active" style="margin:0; padding: 4.5px 11px; font-size: 11.5px; border-radius: 6px; font-weight: 800; cursor: pointer;">OFF</button>
+            </div>
+          </div>
+          <div id="push-status-lbl" style="font-size: 11px; font-weight: 700; text-align: right; color: var(--text-muted); display: none; margin-top: 4px;"></div>
+        </div>
+
+        <!-- [2. 데이터 초기화] -->
+        <div class="setting-card" id="data-reset-card" style="border: 1px solid #FFCDD2; background-color: #FFEBEE;">
+          <div style="font-size: 13px; font-weight: 800; color: #D32F2F;">데이터 초기화</div>
+          <span style="color: #555555; font-size: 11.5px; line-height: 1.45; margin-top: -4px; font-weight: 700;" id="data-reset-desc">
+            진단 이력, 작물 변경 이력 등 저장된 데이터를 모두 삭제합니다.
+          </span>
+          <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+            <button style="background-color: #FFFFFF; color: #D32F2F; border: 1.5px solid #D32F2F; font-size: 11.5px; padding: 6px 14px; font-weight: 800; border-radius: 8px; cursor: pointer;" onclick="resetAllData()">초기화</button>
+          </div>
+        </div>
+
+        <!-- 연결 자가 자가 확인 -->
+        <button class="action-btn" style="background-color: #37474F;" onclick="reverifyConnection()">
+          현재 연결 감지 확인하기
+        </button>
+        <span id="conn-test-feedback" style="font-size: 12px; font-weight: 700; text-align: center; display: none;"></span>
+
+        <div style="text-align: center; font-size: 10px; color: #9E9E9E; font-weight: 700; margin-top: 10px;">
+          GreenSense v1.0 — AI IoT 스마트 채소 재배 시스템
+        </div>
+      </div>
+
+      <!-- 네비게이션 탭 바 -->
+      <nav class="tab-bar">
+        <button id="nav-btn-home" class="tab-btn active" onclick="switchMainTab('tab-home')">
+          <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>홈</span>
+        </button>
+        <button id="nav-btn-diagnose" class="tab-btn" onclick="switchMainTab('tab-diagnose')">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>진단</span>
+        </button>
+        <button id="nav-btn-chatbot" class="tab-btn" onclick="switchMainTab('tab-chatbot')">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>챗봇</span>
+        </button>
+        <button id="nav-btn-history" class="tab-btn" onclick="switchMainTab('tab-history')">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>기록</span>
+        </button>
+        <button id="nav-btn-report" class="tab-btn" onclick="switchMainTab('tab-report')">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>리포트</span>
+        </button>
+        <button id="nav-btn-settings" class="tab-btn" onclick="switchMainTab('tab-settings')">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>설정</span>
+        </button>
+      </nav>
+
+      <!-- 팝업 모달 시트 -->
+      <div id="modal-dim" class="modal-dimmed" onclick="closeModalOnBackdrop(event)">
+        <div class="slide-popup" id="slide-popup">
+          <div class="popup-title">
+            <span id="pop-title-text">지표 명칭</span>
+            <button class="popup-close-btn" onclick="closePopup()">×</button>
+          </div>
+          <div class="popup-table">
+            <div class="popup-row">
+              <span class="popup-lbl">현재 상태 측정값</span>
+              <span class="popup-val" id="pop-curr-val">--</span>
+            </div>
+            <div class="popup-row">
+              <span class="popup-lbl">정상 생육 권장 범위</span>
+              <span class="popup-val" id="pop-normal-range">--</span>
+            </div>
+            <div class="popup-row">
+              <span class="popup-lbl">현재 평가 등급</span>
+              <span class="popup-val" id="pop-status">--</span>
+            </div>
+          </div>
+          <div class="popup-guide" id="pop-guide-text">
+            가이드 조치 정보
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- JAVASCRIPT LOGIC -->
+    <!-- ============================================== -->
+    <script>
+      // 1. 기준 설정값 지정
+      const cropStandards = {
+        "상추": { temp: [15, 25], humi: [60, 80], soil: [50, 85], lux: [1000, 12500], gas_ppm: [400, 1500] },
+        "깻잎": { temp: [15, 24], humi: [50, 70], soil: [45, 70], lux: [2000, 16200], gas_ppm: [400, 1000] },
+        "대파": { temp: [15, 25], humi: [55, 75], soil: [45, 75], lux: [800, 11000], gas_ppm: [400, 1000] },
+        "시금치": { temp: [10, 20], humi: [55, 75], soil: [50, 80], lux: [1000, 11000], gas_ppm: [400, 1000] },
+        "청경채": { temp: [15, 25], humi: [60, 75], soil: [45, 75], lux: [1000, 11000], gas_ppm: [400, 700] }
+      };
+
+      // 2. 가상 백업 모의 데이터 (오프라인 수명 조치용)
+      const mockLatest = {
+        "crop": "상추",
+        "timestamp": "12:00:00",
+        "temp": 18.5,
+        "humi": 64,
+        "lux": 9200.0,
+        "soil": 72.5,
+        "gas_ppm": 620,
+        "alerts": []
+      };
+
+      // 3. 글로벌 상태 관리 매개
+      const appState = {
+        currentCrop: "상추",
+        temp: 20.0,
+        humi: 65,
+        soil: 70.0,
+        lux: 9000.0,
+        gas_ppm: 550,
+        alerts: [],
+        timestamp: getCurrentTimeString(),
+        soilAlertThreshold: 65,
+        
+        historyData: [],
+        historyFilter: "all",
+        diagnoseHistoryList: [],
+        chatbotHistoryList: [],
+        autoDiagnoseIntervalId: null,
+        activeTab: "tab-home",
+        lastRecvTime: null
+      };
+
+      // 한국형 시간 형식 오전/오후 HH:MM 생성 헬퍼
+      function getKoreanTimeFormat(date = new Date()) {
+        let hours = date.getHours();
+        const minutes = date.getMinutes();
+        const ampm = hours >= 12 ? '오후' : '오전';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const minStr = minutes < 10 ? '0' + minutes : minutes;
+        return `${ampm} ${hours}:${minStr}`;
+      }
+
+      // 웹소켓 핸들러 객체
+      let wsClient = null;
+
+      // --- [홈 탭 실시간 갱신 & 카툰 야채 SVG 렌더링 헬퍼] ---
+      function generateVegetableSVG(crop, state) {
+        let bodySVG = "";
+        
+        if (crop === "상추") {
+          bodySVG = `
+            <!-- Background leaves -->
+            <path d="M40 100 C20 70, 70 40, 100 60 C130 40, 180 70, 160 100 C180 130, 130 170, 100 150 C70 170, 20 130, 40 100 Z" fill="#81C784" />
+            <path d="M60 100 C45 80, 85 60, 100 75 C115 60, 155 80, 140 100 C155 120, 115 150, 100 135 C85 150, 45 120, 60 100 Z" fill="#4CAF50" />
+            <!-- Central round body -->
+            <circle cx="100" cy="110" r="45" fill="#A5D6A7" stroke="#2E7D32" stroke-width="3" />
+          `;
+        } else if (crop === "깻잎") {
+          bodySVG = `
+            <!-- Purplish back leaf shadow -->
+            <path d="M100 45 C40 45, 30 120, 100 170 C170 120, 160 45, 100 45 Z" fill="#BA68C8" opacity="0.6" />
+            <!-- Front dark green leaf -->
+            <path d="M100 50 C45 50, 35 115, 100 165 C165 115, 155 50, 100 50 Z" fill="#2E7D32" stroke="#1B5E20" stroke-width="3.5" />
+            <!-- Veins -->
+            <path d="M100 50 L100 165" stroke="#81C784" stroke-width="3" stroke-linecap="round" />
+            <path d="M100 80 Q130 90 145 75" fill="none" stroke="#81C784" stroke-width="2" />
+            <path d="M100 100 Q130 115 140 105" fill="none" stroke="#81C784" stroke-width="2" />
+            <path d="M100 120 Q120 135 130 130" fill="none" stroke="#81C784" stroke-width="2" />
+            <path d="M100 80 Q70 90 55 75" fill="none" stroke="#81C784" stroke-width="2" />
+            <path d="M100 100 Q70 115 60 105" fill="none" stroke="#81C784" stroke-width="2" />
+            <path d="M100 120 Q80 135 70 130" fill="none" stroke="#81C784" stroke-width="2" />
+          `;
+        } else if (crop === "대파") {
+          bodySVG = `
+            <!-- Roots -->
+            <path d="M90 170 L90 180 M100 170 L100 182 M110 170 L110 180" stroke="#D7CCC8" stroke-width="3" stroke-linecap="round" />
+            <!-- White base -->
+            <rect x="75" y="110" width="50" height="60" rx="10" fill="#FFFFFF" stroke="#B0BEC5" stroke-width="3" />
+            <!-- Light green transition -->
+            <rect x="75" y="80" width="50" height="35" fill="#C8E6C9" />
+            <line x1="75" y1="110" x2="125" y2="110" stroke="#81C784" stroke-width="2" />
+            <!-- Sprouting Green tops -->
+            <path d="M80 80 Q70 30, 60 25 Q70 20, 85 80 Z" fill="#388E3C" stroke="#2E7D32" stroke-width="2" />
+            <path d="M100 80 Q100 20, 100 15 Q105 20, 110 80 Z" fill="#4CAF50" stroke="#388E3C" stroke-width="2" />
+            <path d="M120 80 Q130 30, 140 25 Q130 20, 115 80 Z" fill="#388E3C" stroke="#2E7D32" stroke-width="2" />
+            <!-- Body border line for seamless green body -->
+            <path d="M75 170 L75 80 L125 80 L125 170" fill="none" stroke="#2E7D32" stroke-width="3" />
+          `;
+        } else if (crop === "시금치") {
+          bodySVG = `
+            <!-- Pinkish base roots -->
+            <path d="M90 155 Q100 175 110 155" fill="#E91E63" stroke="#C2185B" stroke-width="2" />
+            <path d="M100 160 L100 175" stroke="#C2185B" stroke-width="3.5" stroke-linecap="round" />
+            <!-- Overlapping dark green spear leaves -->
+            <path d="M60 130 C40 100, 60 70, 85 95 C100 80, 120 100, 110 120 Z" fill="#1B5E20" />
+            <path d="M140 130 C160 100, 140 70, 115 95 C100 80, 80 100, 90 120 Z" fill="#1B5E20" />
+            <!-- Central face leaf -->
+            <path d="M100 65 C65 65, 60 130, 100 155 C140 130, 135 65, 100 65 Z" fill="#2E7D32" stroke="#1B5E20" stroke-width="3" />
+            <!-- Veins -->
+            <path d="M100 65 L100 155" stroke="#81C784" stroke-width="2.5" stroke-linecap="round" />
+          `;
+        } else {
+          bodySVG = `
+            <!-- Side stalk/leaves -->
+            <path d="M60 150 C50 110, 50 80, 75 60 C85 85, 75 130, 70 150 Z" fill="#E8F5E9" stroke="#C8E6C9" stroke-width="2" />
+            <path d="M75 60 C60 40, 50 30, 65 20 C80 30, 85 50, 75 60 Z" fill="#2E7D32" stroke="#1B5E20" stroke-width="2" />
+            
+            <path d="M140 150 C150 110, 150 80, 125 60 C115 85, 125 130, 130 150 Z" fill="#E8F5E9" stroke="#C8E6C9" stroke-width="2" />
+            <path d="M125 60 C140 40, 150 30, 135 20 C120 30, 115 50, 125 60 Z" fill="#2E7D32" stroke="#1B5E20" stroke-width="2" />
+            
+            <!-- Center Stem -->
+            <path d="M75 150 C70 100, 80 80, 100 80 C120 80, 130 100, 125 150 C115 160, 85 160, 75 150 Z" fill="#FFFFFF" stroke="#CFD8DC" stroke-width="3.5" />
+            <!-- Green Leaf part on top of Center Stem -->
+            <path d="M100 80 C80 60, 70 40, 100 25 C130 40, 120 60, 100 80 Z" fill="#2E7D32" stroke="#1B5E20" stroke-width="3" />
+          `;
+        }
+
+        let expressionSVG = "";
+        
+        if (state === "happy") {
+          expressionSVG = `
+            <!-- Cheeks -->
+            <circle cx="82" cy="118" r="7" fill="#FF8A80" opacity="0.65" />
+            <circle cx="118" cy="118" r="7" fill="#FF8A80" opacity="0.65" />
+            <!-- Eyes: arch happy -->
+            <path d="M73 103 Q82 95 91 103" fill="none" stroke="#263238" stroke-width="3.5" stroke-linecap="round" />
+            <path d="M109 103 Q118 95 127 103" fill="none" stroke="#263238" stroke-width="3.5" stroke-linecap="round" />
+            <!-- Mouth: smiling -->
+            <path d="M89 119 Q100 133 111 119" fill="#E53935" stroke="#263238" stroke-width="2.5" stroke-linecap="round" />
+          `;
+        } else if (state === "thirsty") {
+          expressionSVG = `
+            <!-- Cheeks -->
+            <circle cx="82" cy="118" r="5" fill="#CFD8DC" />
+            <circle cx="118" cy="118" r="5" fill="#CFD8DC" />
+            <!-- Eyes: sad downward -->
+            <path d="M73 99 L91 105" fill="none" stroke="#263238" stroke-width="4" stroke-linecap="round" />
+            <path d="M127 99 L109 105" fill="none" stroke="#263238" stroke-width="4" stroke-linecap="round" />
+            <!-- Mouth: droopy -->
+            <path d="M92 121 Q100 114 108 121" fill="none" stroke="#263238" stroke-width="3.5" stroke-linecap="round" />
+            <!-- Tear/Water droplet falling -->
+            <path d="M120 126 C120 130 117 131 117 126 C117 122 120 120 120 126 Z" fill="#29B6F6" />
+            <path d="M75 110 C75 113 73 114 73 110 C73 107 75 106 75 110 Z" fill="#29B6F6" />
+          `;
+        } else if (state === "hot") {
+          expressionSVG = `
+            <!-- Cheeks: very flushed (red) -->
+            <circle cx="82" cy="118" r="9" fill="#FF5252" opacity="0.8" />
+            <circle cx="118" cy="118" r="9" fill="#FF5252" opacity="0.8" />
+            <!-- Eyes: squinted lines -->
+            <path d="M72 103 L90 103" stroke="#263238" stroke-width="4.2" stroke-linecap="round" />
+            <path d="M110 103 L128 103" stroke="#263238" stroke-width="4.2" stroke-linecap="round" />
+            <!-- Mouth: panting open -->
+            <rect x="92" y="115" width="16" height="11" rx="5" fill="#C62828" stroke="#263238" stroke-width="2.5" />
+            <!-- Tongue inside mouth -->
+            <path d="M96 126 Q100 121 104 126" fill="#FF8A80" />
+            <!-- Sweat bead on head -->
+            <path d="M56 80 C56 85 52 87 52 82 C52 77 56 73 56 80 Z" fill="#29B6F6" transform="rotate(-15 56 80)" />
+          `;
+        } else if (state === "cold") {
+          expressionSVG = `
+            <!-- Cheeks: cyan shivering -->
+            <circle cx="82" cy="118" r="8" fill="#80DEEA" opacity="0.8" />
+            <circle cx="118" cy="118" r="8" fill="#80DEEA" opacity="0.8" />
+            <!-- Eyes: Shivering -->
+            <path d="M72 101 L82 106 L72 111" fill="none" stroke="#263238" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M128 101 L118 106 L128 111" fill="none" stroke="#263238" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+            <!-- Mouth: shivering squiggly -->
+            <path d="M88 122 L93 118 L98 122 L103 118 L108 122 L113 118" fill="none" stroke="#263238" stroke-width="3" stroke-linecap="round" />
+          `;
+        } else {
+          expressionSVG = `
+            <!-- Cheeks: worried pink -->
+            <circle cx="82" cy="118" r="8" fill="#FF8A80" opacity="0.6" />
+            <circle cx="118" cy="118" r="8" fill="#FF8A80" opacity="0.6" />
+            <!-- Eyes -->
+            <circle cx="82" cy="103" r="7" fill="none" stroke="#263238" stroke-width="3" />
+            <circle cx="82" cy="103" r="3" fill="#263238" />
+            <circle cx="118" cy="103" r="7" fill="none" stroke="#263238" stroke-width="3" />
+            <circle cx="118" cy="103" r="3" fill="#263238" />
+            <!-- Worried eyebrows -->
+            <path d="M70 93 Q80 91 90 96" fill="none" stroke="#263238" stroke-width="3" stroke-linecap="round" />
+            <path d="M130 93 Q120 91 110 96" fill="none" stroke="#263238" stroke-width="3" stroke-linecap="round" />
+            <!-- Mouth -->
+            <circle cx="100" cy="122" r="7" fill="#C62828" stroke="#263238" stroke-width="2.5" />
+            <!-- Sweat drop -->
+            <path d="M142 80 C142 84 139 85 139 81 C139 77 142 74 142 80 Z" fill="#29B6F6" />
+          `;
+        }
+
+        return `
+          <svg viewBox="0 0 200 200" style="width: 100%; height: 100%; display: block;">
+            <defs>
+              <radialGradient id="grad-shadow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#000000" stop-opacity="0.15" />
+                <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+              </radialGradient>
+            </defs>
+            <!-- Ground Shadow -->
+            <ellipse cx="100" cy="172" rx="55" ry="10" fill="url(#grad-shadow)" />
+            ${bodySVG}
+            ${expressionSVG}
+          </svg>
+        `;
+      }
+
+      function getVegetableStateAndSpeech() {
+        const std = cropStandards[appState.currentCrop] || { temp: [15, 20], soil: [60, 80], lux: [6000, 10000] };
+        
+        let activeAlerts = appState.alerts || [];
+        const needsWater = appState.soil < appState.soilAlertThreshold;
+
+        let stressCount = 0;
+        let isTempHigh = appState.temp > std.temp[1];
+        let isTempLow = appState.temp < std.temp[0];
+        let isLuxLow = appState.lux < std.lux[0];
+
+        if (isTempHigh) stressCount++;
+        if (isTempLow) stressCount++;
+        if (needsWater) stressCount++;
+        if (isLuxLow) stressCount++;
+
+        const otherStressCount = activeAlerts.filter(a => !a.includes("수분") && !a.includes("온도") && !a.includes("조도")).length;
+        stressCount += otherStressCount;
+
+        if (stressCount >= 2) {
+          return { state: "help", message: "도움이 필요해요... 😰" };
+        } else if (needsWater) {
+          return { state: "thirsty", message: "목말라요... 물 주실 때가 됐어요 💧" };
+        } else if (isTempHigh) {
+          return { state: "hot", message: "너무 더워요! 시원하게 해주세요 🥵" };
+        } else if (isTempLow) {
+          return { state: "cold", message: "조금 추워요... 따뜻하게 해주세요 🥶" };
+        } else if (isLuxLow) {
+          return { state: "thirsty", message: "햇빛이 그리워요 ☀️" };
+        }
+
+        return { state: "happy", message: "오늘도 잘 자라고 있어요! 기분이 좋아요 😊" };
+      }
+
+      function updateWateringCardUI(data) {
+        const card = document.getElementById('home-watering-card');
+        const content = document.getElementById('home-watering-content');
+        if (!card || !content) return;
+
+        const needsWater = data.needs_water;
+        const lastWatered = data.last_watered || "정보 없음";
+        const belowSince = data.below_since;
+
+        if (needsWater) {
+          card.style.backgroundColor = "#EBF5FB"; // 파란 배경
+          card.style.borderColor = "#3498DB";
+          
+          let dryDurationHtml = belowSince ? `<div style="font-size: 11.5px; color: #2980B9; margin-top: 4px; font-weight: 700;">${belowSince}부터 건조 상태</div>` : "";
+          content.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 24px;">💧</span>
+              <div style="text-align: left;">
+                <div style="font-size: 15px; font-weight: 800; color: #2980B9;">지금 물을 주세요</div>
+                ${dryDurationHtml}
+              </div>
+            </div>
+          `;
+        } else {
+          card.style.backgroundColor = "#FFFFFF"; // 일반 흰 배경
+          card.style.borderColor = "var(--border)";
+          
+          content.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 24px;">✅</span>
+              <div style="text-align: left;">
+                <div style="font-size: 14.5px; font-weight: 800; color: var(--text);">물주기 양호</div>
+                <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px; font-weight: 700;">마지막 급수: ${lastWatered}</div>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      function updateHarvestCardUI(data) {
+        const content = document.getElementById('home-harvest-content');
+        if (!content) return;
+
+        const remainingDays = data.remaining_days !== undefined ? data.remaining_days : "--";
+        const harvestDate = data.harvest_date || "날짜 미정";
+
+        content.innerHTML = `
+          <div style="display: flex; align-items: baseline; gap: 4px; margin-bottom: 2px;">
+            <span style="font-size: 12.5px; font-weight: 800; color: var(--text-muted);">수확까지</span>
+            <span style="font-size: 26px; font-weight: 900; color: var(--primary);">${remainingDays}일</span>
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-muted); font-weight: 700;">예상 수확일: ${harvestDate}</div>
+        `;
+      }
+
+      function refreshHomeTabDetails() {
+        // 로컬스토리지 실시간 변경사항 검측 및 동적 연동 반영
+        const storedCrop = localStorage.getItem('gs_selected_crop');
+        if (storedCrop && storedCrop !== appState.currentCrop && cropStandards[storedCrop]) {
+          appState.currentCrop = storedCrop;
+          
+          const storedThreshold = localStorage.getItem('gs_soil_threshold');
+          if (storedThreshold) {
+            appState.soilAlertThreshold = Number(storedThreshold);
+          } else {
+            appState.soilAlertThreshold = cropStandards[appState.currentCrop].soil[0];
+          }
+
+          syncCropSelectedUI();
+          syncSoilSliderUI();
+        }
+
+        const crop = appState.currentCrop;
+        
+        // 1. 캐릭터 상태 & 메시지 업데이트
+        const bubbleResult = getVegetableStateAndSpeech();
+        
+        const speechBubble = document.getElementById('vegetable-speech-bubble');
+        if (speechBubble) {
+          speechBubble.innerText = bubbleResult.message;
+        }
+        
+        const avatarContainer = document.getElementById('vegetable-avatar-container');
+        if (avatarContainer) {
+          avatarContainer.innerHTML = generateVegetableSVG(crop, bubbleResult.state);
+        }
+        
+        const cropLabel = document.getElementById('home-crop-name-label');
+        if (cropLabel) {
+          cropLabel.innerText = crop;
+        }
+
+        const cropBadge = document.getElementById('home-crop-badge');
+        if (cropBadge) {
+          cropBadge.innerText = crop;
+        }
+
+        // 2. HTTP Watering API 갱신
+        fetch("http://172.16.11.209:8000/api/watering")
+          .then(res => {
+            if (!res.ok) throw new Error("Watering Call Failed");
+            return res.json();
+          })
+          .then(data => {
+            updateWateringCardUI(data);
+          })
+          .catch(err => {
+            console.warn("Watering API fallback applied:", err);
+            const needsWater = appState.soil < appState.soilAlertThreshold;
+            const fallbackWater = {
+              needs_water: needsWater,
+              last_watered: "수동/대기 상태 (재요청 ↻)",
+              below_since: needsWater ? "현재" : null
+            };
+            updateWateringCardUI(fallbackWater);
+          });
+
+        // 3. HTTP Harvest API 갱신
+        fetch(`http://172.16.11.209:8000/api/harvest?crop=${encodeURIComponent(crop)}`)
+          .then(res => {
+            if (!res.ok) throw new Error("Harvest Call Failed");
+            return res.json();
+          })
+          .then(data => {
+            updateHarvestCardUI(data);
+          })
+          .catch(err => {
+            console.warn("Harvest API fallback applied:", err);
+            const fallbackHarvest = {
+              remaining_days: 14,
+              harvest_date: "2026-06-26"
+            };
+            updateHarvestCardUI(fallbackHarvest);
+          });
+      }
+
+      // 4. 애플리케이션 초기화 구문
+      window.addEventListener('DOMContentLoaded', () => {
+        // ALWAYS default body theme to light as dark-mode is fully removed
+        document.body.classList.remove('dark-mode');
+
+        // 알림 권한 UI 복구
+        const storedPush = localStorage.getItem('gs_push_enabled');
+        const btnOn = document.getElementById('btn-push-on');
+        const btnOff = document.getElementById('btn-push-off');
+        const statusLbl = document.getElementById('push-status-lbl');
+
+        if (storedPush === 'true' && Notification.permission === 'granted') {
+          if (btnOn) btnOn.classList.add('active');
+          if (btnOff) btnOff.classList.remove('active');
+          if (statusLbl) {
+            statusLbl.style.display = 'block';
+            statusLbl.innerText = "알림이 활성화되었습니다 ✓";
+            statusLbl.style.color = "var(--primary)";
+          }
+        } else {
+          if (btnOff) btnOff.classList.add('active');
+          if (btnOn) btnOn.classList.remove('active');
+          if (statusLbl && storedPush === 'true' && Notification.permission === 'denied') {
+            statusLbl.style.display = 'block';
+            statusLbl.innerText = "알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요";
+            statusLbl.style.color = "var(--alert)";
+          }
+        }
+
+        // 로컬 스토리지 역직렬화
+        const storedCrop = localStorage.getItem('gs_selected_crop');
+        if (storedCrop && cropStandards[storedCrop]) {
+          appState.currentCrop = storedCrop;
+        }
+
+        const storedThreshold = localStorage.getItem('gs_soil_threshold');
+        if (storedThreshold) {
+          appState.soilAlertThreshold = Number(storedThreshold);
+        } else {
+          appState.soilAlertThreshold = cropStandards[appState.currentCrop].soil[0];
+        }
+
+        const storedKey = localStorage.getItem('claude_api_key');
+        if (storedKey) {
+          const claudeInputInstance = document.getElementById('claude-input');
+          if (claudeInputInstance) claudeInputInstance.value = storedKey;
+        }
+
+        const storedHistory = localStorage.getItem('gs_diagnose_history');
+        if (storedHistory) {
+          try {
+            appState.diagnoseHistoryList = JSON.parse(storedHistory);
+          } catch(e) {
+            appState.diagnoseHistoryList = [];
+          }
+        }
+
+        const storedCropHistoryLog = localStorage.getItem('gs_crop_history_log');
+        if (storedCropHistoryLog) {
+          document.getElementById('crop-change-history-lbl').innerText = `마지막 변경: ${storedCropHistoryLog}`;
+        }
+
+        // 초기 UI 연동
+        syncCropSelectedUI();
+        syncSoilSliderUI();
+        syncClaudeKeyUI();
+        renderDiagnoseHistoryAccordion();
+
+        // 실시간 연동 가동
+        connectWebSocket();
+        reinitSensorDataFetch();
+        loadHistoryData();
+
+        // 3~5초마다 홈 탭 데이터 주기적 갱신
+        refreshHomeTabDetails();
+        setInterval(refreshHomeTabDetails, 4000);
+      });
+
+      // 5. 웹소켓 체계 구축 (ws -> 3초 자동 재연결)
+      function connectWebSocket() {
+        const connDots = [document.getElementById('conn-dot'), document.getElementById('conn-dot-history')];
+        const connTexts = [document.getElementById('conn-text'), document.getElementById('conn-text-history')];
+        
+        connDots.forEach(node => { if (node) node.className = "connection-dot waiting"; });
+        connTexts.forEach(node => { if (node) node.innerText = "대기"; });
+
+        wsClient = new WebSocket("ws://172.16.11.209:8000/ws");
+
+        wsClient.onopen = () => {
+          connDots.forEach(node => { if (node) node.className = "connection-dot connected"; });
+          connTexts.forEach(node => { if (node) node.innerText = "실시간 연결"; });
+        };
+
+        wsClient.onmessage = (event) => {
+          try {
+            const parsed = JSON.parse(event.data);
+            processIncomingData(parsed);
+          } catch(err) {
+            console.error("데이터 이상 감지:", err);
+          }
+        };
+
+        wsClient.onerror = () => {
+          connDots.forEach(node => { if (node) node.className = "connection-dot waiting"; });
+          connTexts.forEach(node => { if (node) node.innerText = "대기"; });
+        };
+
+        wsClient.onclose = () => {
+          connDots.forEach(node => { if (node) node.className = "connection-dot waiting"; });
+          connTexts.forEach(node => { if (node) node.innerText = "대기"; });
+          setTimeout(() => {
+            connectWebSocket();
+          }, 3000);
+        };
+      }
+
+      // 최신 실시간 데이터 백업 폴백 및 HTTP 데이터 수동 갱신
+      function reinitSensorDataFetch() {
+        fetch("http://172.16.11.209:8000/api/latest")
+          .then(res => res.json())
+          .then(data => {
+            processIncomingData(data);
+          })
+          .catch(err => {
+            console.warn("Latest API 응답 지연 - 웹소켓 대피 적용:", err);
+            // 오프라인 Resilience: 가상 모의 최신 수신 데이터 주입
+            processIncomingData(mockLatest);
+          });
+      }
+
+      // 수신 데이터 내부 대입 및 로컬 수식 정밀화
+      function processIncomingData(data) {
+        if (!data) return;
+        
+        // 작물 동기화
+        if (data.crop && cropStandards[data.crop] && data.crop !== appState.currentCrop) {
+          appState.currentCrop = data.crop;
+          syncCropSelectedUI();
+          if (appState.activeTab === 'tab-report') {
+            fetchHarvestPrediction();
+          }
+        }
+
+        appState.temp = typeof data.temp === 'number' ? data.temp : parseFloat(data.temp) || 20.0;
+        appState.humi = typeof data.humi === 'number' ? data.humi : parseFloat(data.humi) || 60;
+        appState.soil = typeof data.soil === 'number' ? data.soil : parseFloat(data.soil) || 70.0;
+        appState.lux = typeof data.lux === 'number' ? data.lux : parseFloat(data.lux) || 9000;
+        appState.gas_ppm = typeof data.gas_ppm === 'number' ? data.gas_ppm : parseFloat(data.gas_ppm) || 500;
+        appState.timestamp = data.timestamp || getCurrentTimeString();
+
+        // 룰 기반 실시간 결격 이상 경고 감지 계산 (WebSocket에서 계산 안 해주거나 추가 검출 보정용)
+        const currentStd = cropStandards[appState.currentCrop];
+        const localComputedAlerts = [];
+        if (appState.temp < currentStd.temp[0]) localComputedAlerts.push("온도 낮음");
+        if (appState.temp > currentStd.temp[1]) localComputedAlerts.push("온도 높음");
+        if (appState.humi < currentStd.humi[0]) localComputedAlerts.push("습도 낮음");
+        if (appState.humi > currentStd.humi[1]) localComputedAlerts.push("습도 높음");
+        if (appState.soil < currentStd.soil[0]) localComputedAlerts.push("토양수분 낮음");
+        if (appState.soil > currentStd.soil[1]) localComputedAlerts.push("토양수분 높음");
+        if (appState.lux < currentStd.lux[0]) localComputedAlerts.push("조도 낮음");
+        if (appState.lux > currentStd.lux[1]) localComputedAlerts.push("조도 높음");
+        if (appState.gas_ppm < currentStd.gas_ppm[0]) localComputedAlerts.push("CO₂ 낮음");
+        if (appState.gas_ppm > currentStd.gas_ppm[1]) localComputedAlerts.push("CO₂ 높음");
+
+        // 병합
+        appState.alerts = localComputedAlerts;
+
+        appState.lastRecvTime = Date.now();
+        updateHomeElapsedText();
+
+        const bellBadgeDot = document.getElementById('bell-badge-dot');
+        if (bellBadgeDot) {
+          bellBadgeDot.style.display = (appState.alerts && appState.alerts.length > 0) ? "block" : "none";
+        }
+
+        renderHomeUI();
+        updateBanners();
+        refreshHomeTabDetails();
+        checkNotifications();
+      }
+
+      // 상대 경고 상태 갱신 함수 
+      function updateHomeElapsedText() {
+        const node = document.getElementById('home-update-elapsed');
+        if (!node) return;
+        
+        if (!appState.lastRecvTime) {
+          node.innerText = "방금 전 갱신";
+          return;
+        }
+        
+        const elapsedMs = Date.now() - appState.lastRecvTime;
+        const elapsedMin = Math.floor(elapsedMs / 60000);
+        
+        if (elapsedMin <= 0) {
+          node.innerText = "방금 전 갱신";
+        } else {
+          node.innerText = `${elapsedMin}분 전 갱신`;
+        }
+      }
+
+      // 주기적인 상대 시간 갱신 타이머 실행
+      setInterval(updateHomeElapsedText, 15000);
+
+      // 오늘의 팁 사전 정의 데이터
+      const cropTips = {
+        "상추": ["물은 흙 표면이 마르면 주세요", "직사광선보다 간접광이 좋아요", "15~20°C가 최적 온도예요"],
+        "깻잎": ["햇빛을 충분히 받아야 향이 진해져요", "과습에 주의하세요", "20°C 이상 유지하세요"],
+        "대파": ["건조에 비교적 강한 편이에요", "깊은 화분이 필요해요", "서늘한 환경을 좋아해요"],
+        "시금치": ["서늘한 환경에서 잘 자라요", "물을 자주 주되 과습 주의", "직사광선을 피하세요"],
+        "청경채": ["수분을 일정하게 유지하세요", "병해충에 주의하세요", "30~45일이면 수확 가능해요"]
+      };
+
+      // 팁을 업데이트하는 상태 캐시
+      let currentTipText = "";
+      let lastTipCrop = "";
+
+      function updateTodayTip(crop) {
+        const tipNode = document.getElementById('home-today-tip');
+        if (!tipNode) return;
+
+        // 동일한 팁을 계속 유지하되, 작물이 바뀌면 랜덤 신규 선택
+        if (crop !== lastTipCrop || !currentTipText) {
+          const tips = cropTips[crop] || ["적정 온습도와 수분을 유지하여 주십시오."];
+          currentTipText = tips[Math.floor(Math.random() * tips.length)];
+          lastTipCrop = crop;
+        }
+        tipNode.innerHTML = `💡 <span style="margin-left: 4px;">${currentTipText}</span>`;
+      }
+
+      function updateSummaryBanner(alertCount) {
+        const banner = document.getElementById('home-summary-banner');
+        if (!banner) return;
+        
+        if (alertCount === 0) {
+          banner.style.backgroundColor = "#E8F5E9"; // 초록 배경
+          banner.style.color = "#2E7D32"; // 짙은 초록
+          banner.style.border = "1.5px solid rgba(46, 125, 50, 0.15)";
+          banner.innerHTML = `<span style="font-size: 15px; margin-right: 4px;">✓</span> 모든 항목 정상 — ${appState.currentCrop}이(가) 건강하게 자라고 있어요`;
+        } else {
+          banner.style.backgroundColor = "#FFFDE7"; // 노란 배경
+          banner.style.color = "#E65100"; // 짙은 주황/갈색
+          banner.style.border = "1.5px solid rgba(255, 179, 0, 0.25)";
+          banner.innerHTML = `<span style="font-size: 15px; margin-right: 4px;">⚠</span> ${alertCount}개 항목 주의 필요`;
+        }
+      }
+
+      // 6. 홈 탭 핵심 렌더러
+      function renderHomeUI() {
+        const std = cropStandards[appState.currentCrop];
+        
+        document.getElementById('v-temp').innerText = appState.temp.toFixed(1);
+        document.getElementById('v-humi').innerText = Math.round(appState.humi);
+        document.getElementById('v-soil').innerText = appState.soil.toFixed(1);
+        document.getElementById('v-lux').innerText = Math.round(appState.lux);
+        document.getElementById('v-gas').innerText = Math.round(appState.gas_ppm);
+        document.getElementById('last-update').innerText = `마지막 업데이트: ${appState.timestamp}`;
+
+        // 개별 수치 한계 판단 카드 하이라이팅 적용
+        validateCardColor('temp', appState.temp, std.temp[0], std.temp[1]);
+        validateCardColor('humi', appState.humi, std.humi[0], std.humi[1]);
+        validateCardColor('soil', appState.soil, std.soil[0], std.soil[1]);
+        validateCardColor('lux', appState.lux, std.lux[0], std.lux[1]);
+        validateCardColor('gas', appState.gas_ppm, std.gas_ppm[0], std.gas_ppm[1]);
+
+        // 상태 요약 배너 업데이트 (전역 alerts 개수를 그대로 넘겨 동기화)
+        updateSummaryBanner(appState.alerts.length);
+        
+        // 오늘의 한마디 팁 카드 업데이트
+        updateTodayTip(appState.currentCrop);
+      }
+
+      function validateCardColor(id, val, min, max) {
+        const cardNode = document.getElementById(`v-${id}`).closest('.sensor-card');
+        const stNode = document.getElementById(`status-${id}`);
+        const rNode = document.getElementById(`range-${id}`);
+        cardNode.className = "sensor-card"; // Reset
+
+        const unitMap = { temp: "°C", humi: "%", soil: "%", lux: "lux", gas: "ppm" };
+        const keywordMap = { temp: "온도", humi: "습도", soil: "토양수분", lux: "조도", gas: "CO₂" };
+        const currentUnit = unitMap[id] || "";
+        const keyword = keywordMap[id];
+
+        if (rNode) {
+          rNode.innerText = `정상범위 ${min}~${max}${currentUnit}`;
+        }
+
+        // 전역 alerts 배열 점검해 카드상태 통일
+        const alertItem = appState.alerts.find(a => a.includes(keyword));
+        if (alertItem) {
+          cardNode.classList.add('sensor-card-alert');
+          if (alertItem.includes("낮음")) {
+            stNode.innerText = "하한 이탈";
+          } else if (alertItem.includes("높음")) {
+            stNode.innerText = "상한 초과";
+          } else {
+            stNode.innerText = "주의";
+          }
+          return true;
+        } else {
+          cardNode.classList.add('sensor-card-normal');
+          stNode.innerText = "정상";
+          return false;
+        }
+      }
+
+      // 배너 렌더링 수식 (기록 탭의 센서 그리드 바로 위에 경고 배너 스택 표시)
+      function updateBanners() {
+        const container = document.getElementById('history-alerts-container');
+        if (!container) return;
+
+        const hasAlerts = appState.alerts && appState.alerts.length > 0;
+
+        if (hasAlerts) {
+          container.style.display = "flex";
+          container.innerHTML = `
+            <div class="alert-banner" style="margin: 0; width: 100%; font-size: 11.5px; padding: 8px 10px;">
+              <svg viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span>기기 상태 경고 지표: ${appState.alerts.join(", ")}</span>
+            </div>
+          `;
+        } else {
+          container.style.display = "none";
+          container.innerHTML = "";
+        }
+      }
+
+      // 7. 슬라이드업 팝업 제어
+      function openSensorPopup(metric) {
+        const names = { temp: "온도", humi: "습도", soil: "토양수분", lux: "조도", gas: "CO₂ 농도" };
+        const units = { temp: "°C", humi: "%", soil: "%", lux: "lux", gas: "ppm" };
+        const std = cropStandards[appState.currentCrop][metric === 'gas' ? 'gas_ppm' : metric];
+        const val = appState[metric === 'gas' ? 'gas_ppm' : metric];
+        
+        let statusText = "정상";
+        let guideText = "";
+
+        if (val < std[0]) {
+          statusText = "하한 이탈";
+          if (metric === 'temp') guideText = "온도가 너무 낮아 채소 성장이 둔화할 수 있습니다. 난방 장치를 가동하거나 공간을 보호해주세요.";
+          if (metric === 'humi') guideText = "공기가 너무 건조하면 병충해에 취약해집니다. 가습 수단을 활용해 대기 환경을 끌어 올려주세요.";
+          if (metric === 'soil') guideText = "토양이 매우 메말라 있어 영양 흡수가 어렵습니다. 즉각적인 급수를 해주시기 바랍니다.";
+          if (metric === 'lux') guideText = "광합성 광량이 부족하여 성장 성숙도가 떨어질 우려가 있습니다. 보광등 가동을 검토하십시오.";
+          if (metric === 'gas') guideText = "이산화탄소 대류 공급이 정체 상태입니다. 유기물 배기가 필요할 수도 있습니다.";
+        } else if (val > std[1]) {
+          statusText = "상한 초과";
+          if (metric === 'temp') guideText = "이상 고온 상태가 유발되면 성장에 팁번 현상이 올 수 있으니 고성능 송풍기나 냉각 장치를 사용하세요.";
+          if (metric === 'humi') guideText = "높은 다습 환경은 곰팡이 침입 원인이 되기 매우 쉽습니다. 미세 제습이나 송풍 제어를 돌려주세요.";
+          if (metric === 'soil') guideText = "토양 속 과다 습기는 뿌리 괴사와 부패를 줍니다. 당분간 추가적인 물 투입을 중지하시고 통기해주십시오.";
+          if (metric === 'lux') guideText = "지나친 일조 강도는 잎 손상이나 수분 과다 탈수를 이끌 수 있으니 가림 필터를 적용 고려하세요.";
+          if (metric === 'gas') guideText = "이산화탄소 농도가 높으므로 즉시 환기를 해주십시오.";
+        } else {
+          statusText = "쾌적";
+          guideText = "생육 환경 대역에 부드럽게 잘 유지되고 있습니다! 안정적인 환경 유지 패턴을 이대로 가져가는 것이 권장 지침입니다.";
+        }
+
+        document.getElementById('pop-title-text').innerText = `${names[metric]} 지표 정밀 명세`;
+        document.getElementById('pop-curr-val').innerText = `${val.toFixed(1)}${units[metric]}`;
+        document.getElementById('pop-normal-range').innerText = `${std[0]} ~ ${std[1]} ${units[metric]}`;
+        
+        const popStatusNode = document.getElementById('pop-status');
+        popStatusNode.innerText = statusText;
+        popStatusNode.style.color = statusText === "쾌적" ? "var(--primary)" : "var(--alert)";
+        document.getElementById('pop-guide-text').innerText = guideText;
+
+        document.getElementById('modal-dim').classList.add('active');
+      }
+
+      function closePopup() {
+        document.getElementById('modal-dim').classList.remove('active');
+      }
+
+      function closeModalOnBackdrop(e) {
+        if (e.target.id === 'modal-dim') {
+          closePopup();
+        }
+      }
+
+      // 8. TAB 2: AI 실시간 진단 수식
+      function requestDiagnose() {
+        const apiKey = localStorage.getItem('claude_api_key');
+        const spinner = document.getElementById('diagnose-spinner');
+        const btn = document.getElementById('diagnose-btn');
+        
+        spinner.style.display = "inline-block";
+        btn.disabled = true;
+
+        const reqBody = { crop: appState.currentCrop };
+        if (apiKey) {
+          reqBody.api_key = apiKey;
+        }
+
+        fetch("http://172.16.11.209:8000/api/diagnose", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(reqBody)
+        })
+          .then(res => {
+            if (!res.ok) throw new Error("진단 응답 오류");
+            return res.json();
+          })
+          .then(data => {
+            const resultObj = {
+              crop: appState.currentCrop,
+              timestamp: getCurrentTimeString(),
+              summary: data.summary || "진단 요약이 원활하게 생성되었습니다.",
+              problem: data.problem || "수집 센서 중 뚜렷한 한계치 이탈 요인이 발견되지 않아 극히 건강한 상태입니다.",
+              solution: data.solution || "기존 설정 임계 규칙에 안착해 있으므로 환풍 가동 일정을 충실히 이행하십시오."
+            };
+
+            // 활성 카드에 적용
+            document.getElementById('diag-summary').innerText = resultObj.summary;
+            document.getElementById('diag-problems').innerText = resultObj.problem;
+            document.getElementById('diag-solutions').innerText = resultObj.solution;
+            document.getElementById('diagnose-result-card').style.display = "flex";
+
+            const diagStamp = document.getElementById('diag-time-stamp');
+            diagStamp.innerText = `마지막 진단: ${resultObj.timestamp}`;
+            diagStamp.style.display = "block";
+
+            // 진단 리스트 한도 5개 큐 조절
+            appState.diagnoseHistoryList.unshift(resultObj);
+            if (appState.diagnoseHistoryList.length > 5) {
+              appState.diagnoseHistoryList.pop();
+            }
+            localStorage.setItem('gs_diagnose_history', JSON.stringify(appState.diagnoseHistoryList));
+            renderDiagnoseHistoryAccordion();
+          })
+          .catch(e => {
+            console.error(e);
+            alert("진단 API 통신 중 지연이 유발되었습니다. 규칙 지대 판정으로 임시 대처합니다.");
+            // 실패 시 규칙 기반 모의 진단 자치 처리
+            runRuleMockDiagnose();
+          })
+          .finally(() => {
+            spinner.style.display = "none";
+            btn.disabled = false;
+          });
+      }
+
+      function runRuleMockDiagnose() {
+        const std = cropStandards[appState.currentCrop];
+        const statusReport = {
+          crop: appState.currentCrop,
+          timestamp: getCurrentTimeString(),
+          summary: `[설비 검진] 현재 ${appState.currentCrop}의 모니터링 수집 데이터가 고대역 측정 규칙과 부드럽게 평가되어 수치 산술 전개 중입니다.`,
+          problem: appState.alerts.length > 0 ? `현재 무거운 지표 이탈(${appState.alerts.join(", ")})이 실측되어 생체 피로 가중 단계입니다.` : "센서 한계치 범위를 충실히 안착하여 특별 유해 요인 인근 미검출되었습니다.",
+          solution: appState.alerts.length > 0 ? "이탈 대역인 환경 조치를 팝업 카드 지침서에 기반해 통제하고, 관수 설정을 검증하세요." : "지속 모드 환풍 가동 및 슬라이더 민감도 안정 상태를 지속하시기 바랍니다."
+        };
+
+        document.getElementById('diag-summary').innerText = statusReport.summary;
+        document.getElementById('diag-problems').innerText = statusReport.problem;
+        document.getElementById('diag-solutions').innerText = statusReport.solution;
+        document.getElementById('diagnose-result-card').style.display = "flex";
+
+        const diagStamp = document.getElementById('diag-time-stamp');
+        diagStamp.innerText = `마지막 진단: ${statusReport.timestamp}`;
+        diagStamp.style.display = "block";
+
+        appState.diagnoseHistoryList.unshift(statusReport);
+        if (appState.diagnoseHistoryList.length > 5) appState.diagnoseHistoryList.pop();
+        localStorage.setItem('gs_diagnose_history', JSON.stringify(appState.diagnoseHistoryList));
+        renderDiagnoseHistoryAccordion();
+      }
+
+      function renderDiagnoseHistoryAccordion() {
+        const accContainer = document.getElementById('diagnose-history-acc');
+        if (appState.diagnoseHistoryList.length === 0) {
+          accContainer.innerHTML = `<span style="font-size:12px; color:#888; text-align:center; display:block; padding: 12px;">진단 이력이 비어 있습니다.</span>`;
+          return;
+        }
+
+        accContainer.innerHTML = "";
+        appState.diagnoseHistoryList.forEach((item, index) => {
+          const itemEl = document.createElement('div');
+          itemEl.className = "accordion-item";
+          itemEl.innerHTML = `
+            <div class="accordion-header" onclick="toggleAccordion(${index})">
+              <span>[${item.timestamp}] ${item.crop} 생육 요약</span>
+              <span id="acc-ar-${index}">▼</span>
+            </div>
+            <div class="accordion-body" id="acc-bd-${index}">
+              <div style="font-weight: 700; margin-bottom: 4px; color: var(--primary);">상세 보고서 내역:</div>
+              <strong>요약:</strong> ${item.summary}<br>
+              <strong>위해점:</strong> ${item.problem}<br>
+              <strong>대응책:</strong> ${item.solution}
+            </div>
+          `;
+          accContainer.appendChild(itemEl);
+        });
+      }
+
+      function toggleAccordion(index) {
+        const targetBody = document.getElementById(`acc-bd-${index}`);
+        const targetArrow = document.getElementById(`acc-ar-${index}`);
+        
+        if (targetBody.style.display === "block") {
+          targetBody.style.display = "none";
+          targetArrow.innerText = "▼";
+        } else {
+          targetBody.style.display = "block";
+          targetArrow.innerText = "▲";
+        }
+      }
+
+      function toggleAutoDiagnose(checked) {
+        if (checked) {
+          requestDiagnose();
+          appState.autoDiagnoseIntervalId = setInterval(() => {
+            requestDiagnose();
+          }, 300000); // 5분
+        } else {
+          if (appState.autoDiagnoseIntervalId) {
+            clearInterval(appState.autoDiagnoseIntervalId);
+            appState.autoDiagnoseIntervalId = null;
+          }
+        }
+      }
+
+      // 9. TAB 3: 기록 렌더링 체계
+      function loadHistoryData() {
+        fetch("http://172.16.11.209:8000/api/history?limit=100")
+          .then(res => res.json())
+          .then(data => {
+            appState.historyData = data;
+            renderHistoryCards();
+            buildInteractiveReport();
+          })
+          .catch(err => {
+            console.warn("기록 조회 실패 - 로컬 하이브리드 모의 데이터 가동:", err);
+            // 모의 데이터 생성
+            generateMockHistoryLog();
+          });
+      }
+
+      function generateMockHistoryLog() {
+        const simulated = [];
+        const crops = ["상추", "깻잎", "대파", "시금치", "청경채"];
+        
+        for (let i = 0; i < 25; i++) {
+          const timestamp = new Date(Date.now() - i * 60000).toLocaleTimeString('ko-KR', { hour12: false });
+          const baseCrop = crops[i % crops.length];
+          const mockTemp = 16 + Math.random() * 8;
+          const mockHumi = 55 + Math.random() * 20;
+          const mockSoil = 50 + Math.random() * 25;
+          const mockLux = 5000 + Math.random() * 6000;
+          const mockGas = 350 + Math.random() * 500;
+          const alerts = [];
+          
+          if (mockSoil < 60) alerts.push("토양수분 낮음");
+          if (mockTemp > 23) alerts.push("온도 높음");
+
+          simulated.push({
+            crop: baseCrop,
+            timestamp: timestamp,
+            temp: mockTemp,
+            humi: mockHumi,
+            soil: mockSoil,
+            lux: mockLux,
+            gas_ppm: mockGas,
+            alerts: alerts
+          });
+        }
+        appState.historyData = simulated;
+        renderHistoryCards();
+        buildInteractiveReport();
+      }
+
+      function renderHistoryCards() {
+        const listContainer = document.getElementById('history-container');
+        listContainer.innerHTML = "";
+
+        const filtered = appState.historyData.filter(item => {
+          if (appState.historyFilter === 'warn') {
+            return item.alerts && item.alerts.length > 0;
+          }
+          return true;
+        });
+
+        if (filtered.length === 0) {
+          listContainer.innerHTML = `<span style="font-size:12px; color:#888; text-align:center; display:block; padding: 40px 0;">아직 기록이 없습니다.</span>`;
+          return;
+        }
+
+        filtered.forEach((item, index) => {
+          const cardNode = document.createElement('div');
+          const hasWarn = item.alerts && item.alerts.length > 0;
+          cardNode.className = `history-card ${hasWarn ? 'history-card-alert' : ''}`;
+          
+          // 전 지표 포함 팝업 트리거 바인딩
+          cardNode.onclick = () => {
+            openHistoryDetailPopup(item);
+          };
+
+          cardNode.innerHTML = `
+            <div class="history-top">
+              <span class="history-crop">${appState.currentCrop}</span>
+              <div style="display:flex; align-items:center; gap: 6px;">
+                ${hasWarn ? `<span class="badge">경고</span>` : ''}
+                <span class="history-time">${item.timestamp}</span>
+              </div>
+            </div>
+            <div class="history-summary">
+              <span class="history-sum-item">온도: <strong>${item.temp.toFixed(1)}°C</strong></span>
+              <span class="history-sum-item">습도: <strong>${Math.round(item.humi)}%</strong></span>
+              <span class="history-sum-item">수분: <strong>${item.soil.toFixed(1)}%</strong></span>
+            </div>
+          `;
+          listContainer.appendChild(cardNode);
+        });
+      }
+
+      function openHistoryDetailPopup(item) {
+        document.getElementById('pop-title-text').innerText = `성장 로그 상세 실측 통계`;
+        document.getElementById('pop-curr-val').innerText = `${item.temp.toFixed(1)}°C`;
+        document.getElementById('pop-normal-range').innerText = `습도: ${Math.round(item.humi)}% / 수분: ${item.soil.toFixed(1)}%`;
+        
+        const popStatusNode = document.getElementById('pop-status');
+        popStatusNode.innerText = (item.alerts && item.alerts.length > 0) ? "경고 요인 검출" : "정상 통과";
+        popStatusNode.style.color = (item.alerts && item.alerts.length > 0) ? "var(--alert)" : "var(--primary)";
+        
+        document.getElementById('pop-guide-text').innerHTML = `
+          <strong>실시간 지표 정밀 명세:</strong><br>
+          • 작물: ${appState.currentCrop} <br>
+          • 조도값: ${Math.round(item.lux)} lux <br>
+          • CO₂ 농도: ${Math.round(item.gas_ppm)} ppm <br>
+          • 경고 목록: ${ (item.alerts && item.alerts.length > 0) ? item.alerts.join(", ") : "없음" }
+        `;
+
+        document.getElementById('modal-dim').classList.add('active');
+      }
+
+      function setHistoryFilter(mode) {
+        appState.historyFilter = mode;
+        document.getElementById('filter-all-btn').className = `filter-btn ${mode === 'all' ? 'active' : ''}`;
+        document.getElementById('filter-warn-btn').className = `filter-btn ${mode === 'warn' ? 'active' : ''}`;
+        renderHistoryCards();
+      }
+
+      // 10. TAB 4: 리포트 자동 연산 및 SVG 드로잉
+      function buildInteractiveReport() {
+        const history = appState.historyData;
+        if (!history || history.length === 0) return;
+
+        let totalTemp = 0, totalHumi = 0, totalSoil = 0;
+        let alertSum = 0;
+        const alertCounterMap = {};
+
+        history.forEach(item => {
+          totalTemp += item.temp;
+          totalHumi += item.humi;
+          totalSoil += item.soil;
+          if (item.alerts) {
+            alertSum += item.alerts.length;
+            item.alerts.forEach(al => {
+              alertCounterMap[al] = (alertCounterMap[al] || 0) + 1;
+            });
+          }
+        });
+
+        const len = history.length;
+        document.getElementById('rep-avg-temp').innerText = `${(totalTemp / len).toFixed(1)} °C`;
+        document.getElementById('rep-avg-humi').innerText = `${Math.round(totalHumi / len)} %`;
+        document.getElementById('rep-avg-soil').innerText = `${(totalSoil / len).toFixed(1)} %`;
+        document.getElementById('rep-total-alerts').innerText = `${alertSum}회`;
+
+        // 빈발 위해 요소 TOP 3 추출
+        const sortedAlerts = Object.entries(alertCounterMap).sort((a,b) => b[1] - a[1]);
+        const top3Node = document.getElementById('rep-danger-causes');
+        if (sortedAlerts.length === 0) {
+          top3Node.innerText = "분석 범위 기간 동안 측정 이상 이력이 없어 평안합니다.";
+        } else {
+          top3Node.innerHTML = sortedAlerts.slice(0, 3).map((item, idx) => {
+            return `<div>${idx + 1}위: <strong>${item[0]}</strong> (${item[1]}회 감지)</div>`;
+          }).join("");
+        }
+
+        // 등급 산출 수식
+        let scoreTag = "매우 좋음";
+        let scoreDesc = "환상적인 수분 공급과 광합성 환경 제어입니다! 통기 구도를 현 세팅대로 신뢰하십시오.";
+        let cardBg = "#F0F9EB";
+        let cardBorder = "#C2E7B0";
+        let cardTxt = "var(--primary)";
+
+        if (alertSum >= 1 && alertSum <= 3) {
+          scoreTag = "양호";
+          scoreDesc = "전반적 미량 원소 및 온습 대역선이 안정적으로 보존되고 있습니다. 국소 미세 가습 튜닝만 대치하세요.";
+          cardBg = "#E8F5E9";
+          cardBorder = "#A5D6A7";
+          cardTxt = "var(--primary)";
+        } else if (alertSum >= 4 && alertSum <= 7) {
+          scoreTag = "주의";
+          scoreDesc = "생체 한계치 저촉 횟수가 위험선에 있습니다. 송풍 가동 비중을 늘리시고 기준값을 재점검해주십시오.";
+          cardBg = "#FFFDE7";
+          cardBorder = "#FFF59D";
+          cardTxt = "#F57F17";
+        } else if (alertSum >= 8) {
+          scoreTag = "나쁨";
+          scoreDesc = "검격 이탈 빈도가 매우 잦습니다! 작물이 피로 상태이니 통풍 및 인공 광조사 장치 점검이 즉각적으로 권고됩니다.";
+          cardBg = "#FFF5F5";
+          cardBorder = "#FFCDD2";
+          cardTxt = "var(--alert)";
+        }
+
+        const repCard = document.getElementById('rep-eval-card');
+        repCard.style.backgroundColor = cardBg;
+        repCard.style.borderColor = cardBorder;
+        
+        const repScore = document.getElementById('rep-eval-score');
+        repScore.innerText = scoreTag;
+        repScore.style.color = cardTxt;
+        document.getElementById('rep-eval-desc').innerText = scoreDesc;
+
+        // SVG 추이 차트 그리기 (최근 20회)
+        const recent20 = [...history].slice(0, 20).reverse();
+        renderSVGSparkline('svg-graph-temp', recent20.map(i => i.temp), 'var(--primary)');
+        renderSVGSparkline('svg-graph-humi', recent20.map(i => i.humi), '#00796B');
+        renderSVGSparkline('svg-graph-soil', recent20.map(i => i.soil), '#1565C0');
+
+        if (recent20.length > 0) {
+          const lItem = recent20[recent20.length - 1];
+          document.getElementById('graph-temp-legend').innerText = `${lItem.temp.toFixed(1)}°C`;
+          document.getElementById('graph-humi-legend').innerText = `${Math.round(lItem.humi)}%`;
+          document.getElementById('graph-soil-legend').innerText = `${lItem.soil.toFixed(1)}%`;
+        }
+      }
+
+      function renderSVGSparkline(svgId, dataList, color) {
+        const svg = document.getElementById(svgId);
+        if (!svg || dataList.length === 0) return;
+
+        svg.innerHTML = ""; // 초기화
+        const width = svg.clientWidth || 350;
+        const height = 60;
+
+        const max = Math.max(...dataList) * 1.1;
+        const min = Math.min(...dataList) * 0.9;
+        const range = (max - min) === 0 ? 1 : (max - min);
+
+        const points = dataList.map((val, idx) => {
+          const x = (idx / (dataList.length - 1 || 1)) * width;
+          const y = height - ((val - min) / range) * height;
+          return `${x},${y}`;
+        }).join(" ");
+
+        // 배경 그리드 가이드라인 추가
+        const gridLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        gridLine.setAttribute("x1", "0");
+        gridLine.setAttribute("y1", (height/2).toString());
+        gridLine.setAttribute("x2", width.toString());
+        gridLine.setAttribute("y2", (height/2).toString());
+        gridLine.setAttribute("stroke", "#EEEEEE");
+        gridLine.setAttribute("stroke-dasharray", "4,4");
+        svg.appendChild(gridLine);
+
+        // 꺾은선 Polyline 추가
+        const polyline = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+        polyline.setAttribute("fill", "none");
+        polyline.setAttribute("stroke", color);
+        polyline.setAttribute("stroke-width", "2.5");
+        polyline.setAttribute("points", points);
+        svg.appendChild(polyline);
+
+        // 마지막 데이터 포인트 강조 도트
+        const lastX = width;
+        const lastVal = dataList[dataList.length - 1];
+        const lastY = height - ((lastVal - min) / range) * height;
+
+        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("cx", lastX.toString());
+        dot.setAttribute("cy", lastY.toString());
+        dot.setAttribute("r", "4");
+        dot.setAttribute("fill", color);
+        svg.appendChild(dot);
+      }
+
+      // 11. TAB 5: 설정 관련 핸들러
+      function triggerCropChange(crop) {
+        if (!cropStandards[crop]) return;
+        
+        // 커스텀 확인 창 대치용 확인 팝업
+        const ok = confirm(`작물을 [${crop}]으로 변경할까요? 센서 기준값이 바뀝니다.`);
+        if (!ok) return;
+
+        const prev = appState.currentCrop;
+        appState.currentCrop = crop;
+
+        // 임계 슬라이더의 기본값을 신규 작물 표준 하한값으로 리액티브 전환 적용
+        appState.soilAlertThreshold = cropStandards[crop].soil[0];
+
+        // 로컬 영구화
+        localStorage.setItem('gs_selected_crop', crop);
+        localStorage.setItem('gs_soil_threshold', appState.soilAlertThreshold);
+
+        // 변경 로그 이력 축적
+        const timeStr = getCurrentTimeString().substring(0, 5);
+        const logText = `${prev} → ${crop} (${timeStr})`;
+        localStorage.setItem('gs_crop_history_log', logText);
+        document.getElementById('crop-change-history-lbl').innerText = `마지막 변경: ${logText}`;
+
+        // 리인터페이스 렌더링 동급 싱크
+        syncCropSelectedUI();
+        syncSoilSliderUI();
+        renderHomeUI();
+        updateBanners();
+        refreshHomeTabDetails();
+
+        // 수확 예측 재호출
+        if (appState.activeTab === 'tab-report') {
+          fetchHarvestPrediction();
+        }
+      }
+
+      function syncCropSelectedUI() {
+        if (document.getElementById('hdr-crop-badge')) {
+          document.getElementById('hdr-crop-badge').innerText = appState.currentCrop;
+        }
+        if (document.getElementById('home-crop-badge')) {
+          document.getElementById('home-crop-badge').innerText = appState.currentCrop;
+        }
+        if (document.getElementById('diagnose-crop-lbl')) {
+          document.getElementById('diagnose-crop-lbl').innerText = appState.currentCrop;
+        }
+        const homeCropNameLbl = document.getElementById('home-crop-name-label');
+        if (homeCropNameLbl) {
+          homeCropNameLbl.innerText = appState.currentCrop;
+        }
+
+        // 설정 버튼 셀렉션 싱크
+        const crops = ["상추", "깻잎", "대파", "시금치", "청경채"];
+        crops.forEach(cr => {
+          const btn = document.getElementById(`btn-crop-${cr}`);
+          if (btn) {
+            btn.className = `crop-select-btn ${cr === appState.currentCrop ? 'active' : ''}`;
+          }
+        });
+
+        // 작물 정보 카드 동적 테이블 갱신
+        if (typeof renderCropReferenceTable === 'function') {
+          renderCropReferenceTable();
+        }
+
+        // 진단 탭 항목 버튼 싱크 동시 매핑
+        if (typeof syncDiagCropButtons === 'function') {
+          syncDiagCropButtons();
+        }
+
+        // 각 탭의 연동 요소 갱신
+        if (typeof renderHomeUI === 'function') {
+          renderHomeUI();
+        }
+        if (typeof renderHistoryCards === 'function') {
+          renderHistoryCards();
+        }
+        if (typeof updateReportAICards === 'function') {
+          updateReportAICards();
+        }
+      }
+
+      // [1] 작물 세부 기준 정보 상숫값 사전
+      const cropDetailStandards = cropStandards;
+
+      // [1] 작물 기준표 렌더링 함수
+      function renderCropReferenceTable() {
+        const crop = appState.currentCrop || "상추";
+        const titleNode = document.getElementById('ref-crop-title');
+        if (titleNode) {
+          titleNode.innerText = `${crop} 재배 기준 정보`;
+        }
+
+        const specs = cropDetailStandards[crop] || cropDetailStandards["상추"];
+        const tbody = document.getElementById('ref-crop-table-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = `
+          <tr style="border-bottom: 1.5px solid var(--border);">
+            <td style="padding: 7px 4px; font-weight: 600; color: var(--text);">온도</td>
+            <td style="padding: 7px 4px; text-align: right; font-weight: 700; color: var(--primary);">${specs.temp[0]} ~ ${specs.temp[1]} °C</td>
+          </tr>
+          <tr style="border-bottom: 1.5px solid var(--border);">
+            <td style="padding: 7px 4px; font-weight: 600; color: var(--text);">습도</td>
+            <td style="padding: 7px 4px; text-align: right; font-weight: 700; color: var(--primary);">${specs.humi[0]} ~ ${specs.humi[1]} %</td>
+          </tr>
+          <tr style="border-bottom: 1.5px solid var(--border);">
+            <td style="padding: 7px 4px; font-weight: 600; color: var(--text);">토양수분</td>
+            <td style="padding: 7px 4px; text-align: right; font-weight: 700; color: var(--primary);">${specs.soil[0]} ~ ${specs.soil[1]} %</td>
+          </tr>
+          <tr style="border-bottom: 1.5px solid var(--border);">
+            <td style="padding: 7px 4px; font-weight: 600; color: var(--text);">조도</td>
+            <td style="padding: 7px 4px; text-align: right; font-weight: 700; color: var(--primary);">${specs.lux[0].toLocaleString()} ~ ${specs.lux[1].toLocaleString()} lux</td>
+          </tr>
+          <tr style="border-bottom: 1.5px solid var(--border);">
+            <td style="padding: 7px 4px; font-weight: 600; color: var(--text);">이산화탄소 (CO₂)</td>
+            <td style="padding: 7px 4px; text-align: right; font-weight: 700; color: var(--primary);">${specs.gas_ppm[0]} ~ ${specs.gas_ppm[1]} ppm</td>
+          </tr>
+        `;
+      }
+
+      // [3] 알림 권한 온/오프 처리 및 브라우저 API 교섭
+      let prevNeedsWater = false;
+      const lastSentNotification = {
+        water: 0,
+        co2: 0,
+        stress: 0
+      };
+
+      function triggerBrowserNotification(title, body) {
+        if (!("Notification" in window)) return;
+        if (localStorage.getItem('gs_push_enabled') !== 'true') return;
+        if (Notification.permission !== "granted") return;
+
+        try {
+          new Notification(title, { body: body });
+        } catch (e) {
+          console.error("알림 발송 실패:", e);
+        }
+      }
+
+      function checkNotifications() {
+        if (localStorage.getItem('gs_push_enabled') !== 'true') return;
+        if (Notification.permission !== 'granted') return;
+
+        const now = Date.now();
+        const currentStd = cropStandards[appState.currentCrop] || { temp: [15, 20], soil: [60, 80], lux: [6000, 10000] };
+
+        // 1. 토양수분 부족 (needs_water가 true로 바뀌는 순간)
+        const needsWater = appState.soil < appState.soilAlertThreshold;
+        if (needsWater && !prevNeedsWater) {
+          if (now - lastSentNotification.water >= 5 * 60 * 1000) {
+            triggerBrowserNotification("GreenSense", "💧 물을 주세요! 토양수분이 부족해요");
+            lastSentNotification.water = now;
+          }
+        }
+        prevNeedsWater = needsWater;
+
+        // 2. CO2가 1500ppm 초과
+        if (appState.gas_ppm > 1500) {
+          if (now - lastSentNotification.co2 >= 5 * 60 * 1000) {
+            triggerBrowserNotification("GreenSense", "⚠️ CO₂ 위험! 환기가 필요해요");
+            lastSentNotification.co2 = now;
+          }
+        }
+
+        // 3. 복합 스트레스 2개 이상
+        let stressCount = 0;
+        const isTempHigh = appState.temp > currentStd.temp[1];
+        const isTempLow = appState.temp < currentStd.temp[0];
+        const isLuxLow = appState.lux < currentStd.lux[0];
+
+        if (isTempHigh) stressCount++;
+        if (isTempLow) stressCount++;
+        if (needsWater) stressCount++;
+        if (isLuxLow) stressCount++;
+
+        const activeAlerts = appState.alerts || [];
+        const otherStressCount = activeAlerts.filter(a => !a.includes("수분") && !a.includes("온도") && !a.includes("조도")).length;
+        stressCount += otherStressCount;
+
+        if (stressCount >= 2) {
+          if (now - lastSentNotification.stress >= 5 * 60 * 1000) {
+            triggerBrowserNotification("GreenSense", "🚨 채소가 도움이 필요해요");
+            lastSentNotification.stress = now;
+          }
+        }
+      }
+
+      function togglePushNotifications(enable) {
+        const btnOn = document.getElementById('btn-push-on');
+        const btnOff = document.getElementById('btn-push-off');
+        const statusLbl = document.getElementById('push-status-lbl');
+
+        if (!enable) {
+          localStorage.setItem('gs_push_enabled', 'false');
+          if (btnOff) btnOff.classList.add('active');
+          if (btnOn) btnOn.classList.remove('active');
+          if (statusLbl) {
+            statusLbl.style.display = 'block';
+            statusLbl.innerText = "알림이 비활성화되었습니다.";
+            statusLbl.style.color = "var(--text-muted)";
+          }
+          return;
+        }
+
+        if (!("Notification" in window)) {
+          alert("이 브라우저는 알림 기능을 지원하지 않습니다.");
+          return;
+        }
+
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            localStorage.setItem('gs_push_enabled', 'true');
+            if (btnOn) btnOn.classList.add('active');
+            if (btnOff) btnOff.classList.remove('active');
+            if (statusLbl) {
+              statusLbl.style.display = 'block';
+              statusLbl.innerText = "알림이 활성화되었습니다 ✓";
+              statusLbl.style.color = "var(--primary)";
+            }
+            checkNotifications();
+          } else {
+            localStorage.setItem('gs_push_enabled', 'false');
+            if (btnOff) btnOff.classList.add('active');
+            if (btnOn) btnOn.classList.remove('active');
+            if (statusLbl) {
+              statusLbl.style.display = 'block';
+              statusLbl.innerText = "알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요";
+              statusLbl.style.color = "var(--alert)";
+            }
+          }
+        });
+      }
+
+      // [2] 데이터 초기화 기능
+      function resetAllData() {
+        if (confirm("정말 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
+          localStorage.clear();
+          alert("초기화되었습니다");
+          // 기본값 재설정 후 리로드
+          appState.currentCrop = "상추";
+          appState.soilAlertThreshold = 65;
+          localStorage.setItem('gs_selected_crop', "상추");
+          localStorage.setItem('gs_theme', "light");
+          localStorage.setItem('gs_push_enabled', "false");
+          location.reload();
+        }
+      }
+
+       function syncSoilSliderUI() {
+        const slider = document.getElementById('soil-slider');
+        const percentageLbl = document.getElementById('slider-percentage-lbl');
+        if (slider) slider.value = appState.soilAlertThreshold;
+        if (percentageLbl) percentageLbl.innerText = `${appState.soilAlertThreshold}%`;
+      }
+
+      function updateSoilSliderValue(val) {
+        appState.soilAlertThreshold = Number(val);
+        localStorage.setItem('gs_soil_threshold', val);
+        const percentageLbl = document.getElementById('slider-percentage-lbl');
+        if (percentageLbl) percentageLbl.innerText = `${val}%`;
+        
+        // 실시간 경고 갱신 등을 위한 렌더 갱신 호출
+        if (typeof renderHomeUI === 'function') {
+          renderHomeUI();
+        }
+      }
+
+      // 12. Claude API 연쇄 기능 조치
+      function syncClaudeKeyUI() {
+        const key = localStorage.getItem('claude_api_key');
+        const indicator = document.getElementById('claude-indicator');
+        const input = document.getElementById('claude-input');
+
+        if (indicator && input) {
+          if (key) {
+            indicator.innerText = "● Claude AI 연결됨";
+            indicator.style.color = "var(--primary)";
+            input.placeholder = "sk-ant-api03-*** (키가 안전하게 저장됨)";
+          } else {
+            indicator.innerText = "● 규칙 기반 진단 사용 중";
+            indicator.style.color = "#888888";
+            input.placeholder = "sk-ant-api03-...";
+          }
+        }
+      }
+
+      function saveClaudeKey() {
+        const input = document.getElementById('claude-input');
+        if (!input) return;
+        const key = input.value.trim();
+        if (!key) {
+          alert("API 키를 올바르게 입력해주십시오.");
+          return;
+        }
+
+        localStorage.setItem('claude_api_key', key);
+        input.value = ""; // 필드 청소
+        syncClaudeKeyUI();
+        alert("Claude AI API 비밀키 정보가 로컬 저장소에 안전하게 바인딩되었습니다.");
+      }
+
+      function clearClaudeKey() {
+        localStorage.removeItem('claude_api_key');
+        const input = document.getElementById('claude-input');
+        if (input) input.value = "";
+        syncClaudeKeyUI();
+        alert("Claude AI 연동 해제 및 키 삭제가 완료되었습니다.");
+      }
+
+      // 13. 연결 테스트 자가 진단
+      function reverifyConnection() {
+        const feedback = document.getElementById('conn-test-feedback');
+        feedback.style.display = "block";
+        feedback.innerText = "감지 요청 중...";
+        feedback.style.color = "var(--text-muted)";
+
+        fetch("http://172.16.11.209:8000/api/latest")
+          .then(res => {
+            if (res.ok) {
+              feedback.innerText = "연결됨 ✓";
+              feedback.style.color = "var(--primary)";
+              reinitSensorDataFetch();
+            } else {
+              feedback.innerText = "연결 실패 ✗";
+              feedback.style.color = "var(--alert)";
+            }
+          })
+          .catch(() => {
+            feedback.innerText = "연결 실패 ✗";
+            feedback.style.color = "var(--alert)";
+          })
+          .finally(() => {
+            setTimeout(() => {
+              feedback.style.display = "none";
+            }, 3000);
+          });
+      }
+
+      // 14. 탭 스와핑 제어
+      function switchMainTab(tabId) {
+        appState.activeTab = tabId;
+
+        // 탭 콘텐츠 토글
+        const tabList = ["tab-home", "tab-diagnose", "tab-chatbot", "tab-history", "tab-report", "tab-settings"];
+        tabList.forEach(t => {
+          const ele = document.getElementById(t);
+          if (ele) {
+            if (t === tabId) {
+              ele.classList.add('active');
+              if (t === 'tab-chatbot') ele.style.display = 'flex';
+            } else {
+              ele.classList.remove('active');
+              if (t === 'tab-chatbot') ele.style.display = 'none';
+            }
+          }
+        });
+
+        // 네비게이션 버튼 가시화 싱크
+        const navBtns = ["home", "diagnose", "chatbot", "history", "report", "settings"];
+        navBtns.forEach(b => {
+          const btn = document.getElementById(`nav-btn-${b}`);
+          if (btn) {
+            if (`tab-${b}` === tabId) {
+              btn.classList.add('active');
+            } else {
+              btn.classList.remove('active');
+            }
+          }
+        });
+
+        // 진입 동급 액션 수행
+        if (tabId === 'tab-report' || tabId === 'tab-history') {
+          loadHistoryData();
+        }
+        if (tabId === 'tab-report') {
+          fetchHarvestPrediction();
+          updateReportAICards();
+        }
+        if (tabId === 'tab-chatbot') {
+          initChatbotWelcome();
+        }
+
+        // 경고 배너 실시간 업데이트 제어 (오직 홈 탭에만 표시)
+        updateBanners();
+      }
+
+      // ==============================================
+      // 챗봇 시스템 로직 
+      // ==============================================
+      function initChatbotWelcome() {
+        if (appState.chatbotHistoryList.length === 0) {
+          appState.chatbotHistoryList.push({
+            role: 'assistant',
+            content: "안녕하세요! 채소 재배 관련 궁금한 점을 물어보세요 🌱",
+            time: getKoreanTimeFormat()
+          });
+        }
+        renderChatbotMessages();
+      }
+
+      function renderChatbotMessages() {
+        const container = document.getElementById('chat-messages-container');
+        if (!container) return;
+        container.innerHTML = "";
+        
+        appState.chatbotHistoryList.forEach((msg) => {
+          const isUser = msg.role === 'user';
+          const wrapper = document.createElement('div');
+          wrapper.className = `chat-bubble-wrapper ${isUser ? 'user' : 'claude'}`;
+          
+          const bubble = document.createElement('div');
+          bubble.className = `chat-bubble ${isUser ? 'user' : 'claude'}`;
+          bubble.innerText = msg.content;
+          
+          const timeEl = document.createElement('div');
+          timeEl.className = 'chat-bubble-time';
+          timeEl.innerText = msg.time || getKoreanTimeFormat();
+          
+          wrapper.appendChild(bubble);
+          wrapper.appendChild(timeEl);
+          container.appendChild(wrapper);
+        });
+        
+        container.scrollTop = container.scrollHeight;
+      }
+
+      function showChatLoading(show) {
+        const container = document.getElementById('chat-messages-container');
+        if (!container) return;
+        
+        const existing = document.getElementById('chat-loading-bubble');
+        if (existing) existing.remove();
+        
+        if (show) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'chat-bubble-wrapper claude';
+          wrapper.id = 'chat-loading-bubble';
+          
+          const bubble = document.createElement('div');
+          bubble.className = 'chat-bubble loading-bubble';
+          bubble.innerText = "답변 생성 중...";
+          
+          wrapper.appendChild(bubble);
+          container.appendChild(wrapper);
+          container.scrollTop = container.scrollHeight;
+        }
+      }
+
+      function sendChatMessage() {
+        const input = document.getElementById('chat-input-field');
+        if (!input) return;
+        const msg = input.value.trim();
+        if (!msg) return;
+        
+        input.value = ""; // 입력창 클리어
+        
+        // 대화 이력 최대 10턴 (20개 항목) 유지
+        const historyList = appState.chatbotHistoryList
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .slice(-20)
+          .map(m => ({
+            role: m.role,
+            content: m.content
+          }));
+          
+        // 유저 말풍선 추가
+        const userMsg = {
+          role: 'user',
+          content: msg,
+          time: getKoreanTimeFormat()
+        };
+        appState.chatbotHistoryList.push(userMsg);
+        renderChatbotMessages();
+        
+        // 답변 대기 버블 로딩
+        showChatLoading(true);
+        
+        const payload = {
+          message: msg,
+          history: historyList
+        };
+
+        fetch("http://172.16.11.209:8000/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        })
+          .then(res => {
+            if (!res.ok) throw new Error("FastAPI Chat Server Error");
+            return res.json();
+          })
+          .then(data => {
+            showChatLoading(false);
+            const content = data.reply || "답변을 불러오지 못했습니다.";
+            appState.chatbotHistoryList.push({
+              role: 'assistant',
+              content: content,
+              time: getKoreanTimeFormat()
+            });
+            renderChatbotMessages();
+          })
+          .catch(e => {
+            console.error(e);
+            showChatLoading(false);
+            appState.chatbotHistoryList.push({
+              role: 'assistant',
+              content: "서버 연결을 확인해주세요.",
+              time: getKoreanTimeFormat()
+            });
+            renderChatbotMessages();
+          });
+      }
+      
+      function handleChatInputKey(e) {
+        if (e.key === 'Enter') {
+          sendChatMessage();
+        }
+      }
+
+      // ==============================================
+      // 헤더 알림벨 연계 로직
+      // ==============================================
+      function toggleAlertDropdown(e) {
+        e.stopPropagation();
+        const dropdown = document.getElementById('alert-bell-dropdown');
+        if (!dropdown) return;
+        
+        if (dropdown.style.display === 'flex') {
+          dropdown.style.display = 'none';
+        } else {
+          dropdown.style.display = 'flex';
+          renderAlertDropdownList();
+        }
+      }
+
+      function renderAlertDropdownList() {
+        const list = document.getElementById('alert-bell-list');
+        const dot = document.getElementById('bell-badge-dot');
+        if (!list) return;
+        
+        if (appState.alerts && appState.alerts.length > 0) {
+          list.innerHTML = appState.alerts.map(al => `
+            <div style="display: flex; align-items: center; gap: 6px; color: var(--alert); font-weight: 700; text-align: left;">
+              <span style="color: var(--alert); font-size: 10px; margin-right: 2px;">●</span>
+              <span>${al}</span>
+            </div>
+          `).join("");
+          if (dot) dot.style.display = "block";
+        } else {
+          list.innerHTML = `<div style="text-align: center; color: var(--primary); font-weight: 700; padding: 4px 0; display: flex; align-items: center; justify-content: center; gap: 4px;">현재 경고 없음 ✓</div>`;
+          if (dot) dot.style.display = "none";
+        }
+      }
+
+      // 전역 클릭 시 알림 다이얼로그 폐쇄
+      window.addEventListener('click', () => {
+        const dropdown = document.getElementById('alert-bell-dropdown');
+        if (dropdown) dropdown.style.display = 'none';
+      });
+
+      // ==============================================
+      // 진단 탭 임의 작물 동적 변경 연계
+      // ==============================================
+      function triggerDiagCropChange(crop) {
+        const customInput = document.getElementById('diag-custom-crop-input');
+        const customSaveBtn = document.getElementById('btn-diag-custom-save');
+        if (customInput) customInput.style.display = 'none';
+        if (customSaveBtn) customSaveBtn.style.display = 'none';
+        
+        // 기존 triggerCropChange 로직 복사하되 무확인 진행
+        triggerCropChangeNoConfirm(crop);
+      }
+
+      function triggerCropChangeNoConfirm(crop) {
+        if (!cropStandards[crop]) {
+          cropStandards[crop] = { temp: [15, 25], humi: [60, 80], soil: [60, 80], lux: [6000, 12000], gas_ppm: [400, 1000] };
+        }
+        
+        const prev = appState.currentCrop;
+        appState.currentCrop = crop;
+        appState.soilAlertThreshold = cropStandards[crop].soil[0];
+        
+        localStorage.setItem('gs_selected_crop', crop);
+        localStorage.setItem('gs_soil_threshold', appState.soilAlertThreshold);
+        
+        const timeStr = getCurrentTimeString().substring(0, 5);
+        const logText = `${prev} → ${crop} (${timeStr})`;
+        localStorage.setItem('gs_crop_history_log', logText);
+        const logLbl = document.getElementById('crop-change-history-lbl');
+        if (logLbl) logLbl.innerText = `마지막 변경: ${logText}`;
+        
+        syncCropSelectedUI();
+        syncSoilSliderUI();
+        renderHomeUI();
+        updateBanners();
+        refreshHomeTabDetails();
+        
+        if (appState.activeTab === 'tab-report') {
+          fetchHarvestPrediction();
+        }
+      }
+
+      function syncDiagCropButtons() {
+        const crops = ["상추", "깻잎", "대파", "시금치", "청경채"];
+        crops.forEach(cr => {
+          const btn = document.getElementById(`btn-diag-crop-${cr}`);
+          if (btn) {
+            btn.className = `crop-select-btn ${cr === appState.currentCrop ? 'active' : ''}`;
+          }
+        });
+        
+        const customBtn = document.getElementById('btn-diag-crop-custom');
+        if (customBtn) {
+          if (!crops.includes(appState.currentCrop)) {
+            customBtn.className = "crop-select-btn active";
+          } else {
+            customBtn.className = "crop-select-btn";
+          }
+        }
+      }
+
+      function toggleDiagCustomCropInput() {
+        const input = document.getElementById('diag-custom-crop-input');
+        const saveBtn = document.getElementById('btn-diag-custom-save');
+        if (!input || !saveBtn) return;
+        
+        if (input.style.display === 'none') {
+          input.style.display = 'block';
+          saveBtn.style.display = 'block';
+          input.focus();
+        } else {
+          input.style.display = 'none';
+          saveBtn.style.display = 'none';
+        }
+      }
+
+      function saveCustomCropDirect() {
+        const input = document.getElementById('diag-custom-crop-input');
+        const customSaveBtn = document.getElementById('btn-diag-custom-save');
+        if (!input) return;
+        
+        const cropVal = input.value.trim();
+        if (!cropVal) {
+          alert("작물명을 입력해 주십시오.");
+          return;
+        }
+        
+        triggerCropChangeNoConfirm(cropVal);
+        input.value = "";
+        input.style.display = 'none';
+        if (customSaveBtn) customSaveBtn.style.display = 'none';
+      }
+
+      function handleCustomCropKey(e) {
+        if (e.key === 'Enter') {
+          saveCustomCropDirect();
+        }
+      }
+
+      // ==============================================
+      // 리포트 탭 AI 현황 카드 연계
+      // ==============================================
+      function updateReportAICards() {
+        let historyList = [];
+        const stored = localStorage.getItem('gs_diagnose_history');
+        if (stored) {
+          try {
+            historyList = JSON.parse(stored);
+          } catch (e) {
+            historyList = [];
+          }
+        }
+        
+        const countNode = document.getElementById('rep-ai-diag-count');
+        if (countNode) {
+          countNode.innerText = `${historyList.length}회`;
+        }
+        
+        const statusLabelNode = document.getElementById('rep-ai-status-label');
+        if (statusLabelNode) {
+          statusLabelNode.innerText = historyList.length > 0 ? "인공지능 분석됨" : "자가진단 대기";
+        }
+        
+        const summaryNode = document.getElementById('rep-claude-summary');
+        if (summaryNode) {
+          if (historyList.length > 0) {
+            const latest = historyList[0];
+            const fullSummary = latest.summary || latest.text;
+            if (fullSummary) {
+              summaryNode.innerText = fullSummary;
+            } else {
+              summaryNode.innerText = "상태 기록 결과가 가용 불가합니다.";
+            }
+          } else {
+            summaryNode.innerText = "아직 진단 이력이 없습니다. 진단 탭에서 AI 진단을 요청해보세요.";
+          }
+        }
+      }
+
+      // 수확 예측 API 연동
+      function fetchHarvestPrediction() {
+        const crop = appState.currentCrop;
+        fetch(`http://172.16.11.209:8000/api/harvest?crop=${encodeURIComponent(crop)}`)
+          .then(res => {
+            if (!res.ok) throw new Error("수확 예측 API 응답 에러");
+            return res.json();
+          })
+          .then(data => {
+            renderHarvestPrediction(data);
+          })
+          .catch(err => {
+            console.error("수확 예측 데이터 수신 에러:", err);
+            // 실패 시 디폴트 렌더링
+            renderHarvestPrediction({
+              crop: crop,
+              accumulated_gdd: 0.0,
+              target_gdd: 480,
+              progress: 0.0,
+              remaining_days: "--",
+              harvest_date: "----년 --월 --일",
+              avg_daily_gdd: 0.0
+            });
+          });
+      }
+
+      function renderHarvestPrediction(data) {
+        if (!data) return;
+        
+        // 일수 바인딩
+        const remainingDays = data.remaining_days !== undefined && data.remaining_days !== null ? data.remaining_days : "--";
+        const daysText = remainingDays !== "--" ? `${remainingDays}일` : "--일";
+        document.getElementById('harvest-remaining-days').innerText = daysText;
+        
+        // 날짜형식 YYYY-MM-DD -> YYYY년 MM월 DD일 변환
+        let dateText = "----년 --월 --일";
+        if (data.harvest_date && data.harvest_date !== "----년 --월 --일") {
+          const parts = data.harvest_date.split('-');
+          if (parts.length === 3) {
+            dateText = `${parts[0]}년 ${parts[1]}월 ${parts[2]}일`;
+          } else {
+            dateText = data.harvest_date;
+          }
+        }
+        document.getElementById('harvest-date').innerText = dateText;
+        
+        // 생장 실크 및 바인딩
+        const progress = data.progress !== undefined && data.progress !== null ? data.progress : 0.0;
+        const accumGdd = data.accumulated_gdd !== undefined && data.accumulated_gdd !== null ? data.accumulated_gdd : 0.0;
+        const targetGdd = data.target_gdd !== undefined && data.target_gdd !== null ? data.target_gdd : 480;
+        
+        // progress 소수점 첫째자리 포맷팅
+        const progressPercent = typeof progress === 'number' ? progress.toFixed(1) : parseFloat(progress).toFixed(1);
+        const accumGddText = typeof accumGdd === 'number' ? accumGdd.toFixed(1) : parseFloat(accumGdd).toFixed(1);
+
+        document.getElementById('harvest-progress-lbl').innerText = `생장 달성률 ${progressPercent}% (${accumGddText} / ${targetGdd} GDD)`;
+        document.getElementById('harvest-progress-fill').style.width = `${Math.min(100, Math.max(0, parseFloat(progressPercent)))}%`;
+      }
+
+      // 시간 생성기 보조 함수
+      function getCurrentTimeString() {
+        const d = new Date();
+        const f = n => n < 10 ? '0' + n : n;
+        return `${f(d.getHours())}:${f(d.getMinutes())}:${f(d.getSeconds())}`;
+      }
+    </script>
+  </body>
+</html>

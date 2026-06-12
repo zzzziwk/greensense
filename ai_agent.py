@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-"""
-GreenSense AI 진단 모듈 (규칙 기반 더미 버전)
-센서값이 기준을 벗어나면 자동으로 진단 문자열 생성
-"""
+import os
+import anthropic
 
-# ── 작물별 기준값 ─────────────────────────────────────────────────
 THRESHOLDS = {
     "상추":  {"temp": (15,20), "humi": (60,70), "soil": (65,85), "lux": (8000,11000),  "gas_ppm": (400,1000)},
     "깻잎":  {"temp": (20,25), "humi": (70,80), "soil": (55,65), "lux": (11000,16200), "gas_ppm": (400,1000)},
@@ -13,83 +10,41 @@ THRESHOLDS = {
     "청경채": {"temp": (10,25), "humi": (70,80), "soil": (60,75), "lux": (8000,11000),  "gas_ppm": (400,1000)},
 }
 
-LABELS = {
-    "temp":    "온도",
-    "humi":    "습도",
-    "soil":    "토양수분",
-    "lux":     "조도",
-    "gas_ppm": "CO₂",
-}
-
-UNITS = {
-    "temp":    "°C",
-    "humi":    "%",
-    "soil":    "%",
-    "lux":     " lux",
-    "gas_ppm": " ppm",
-}
-
-# ── 규칙 기반 진단 ────────────────────────────────────────────────
 async def get_diagnosis(data: dict) -> str:
     crop = data.get("crop", "상추")
     th   = THRESHOLDS.get(crop, THRESHOLDS["상추"])
 
-    problems = []
-    actions  = []
+    prompt = f"""
+당신은 실내 채소 재배 전문가입니다. 아래 센서 데이터를 분석하고 한국어로 진단해주세요.
 
-    checks = {
-        "temp":    data.get("temp"),
-        "humi":    data.get("humi"),
-        "soil":    data.get("soil"),
-        "lux":     data.get("lux"),
-        "gas_ppm": data.get("gas_ppm"),
-    }
+작물: {crop}
+현재 센서값:
+- 온도:     {data.get('temp')}°C     (정상범위: {th['temp'][0]}~{th['temp'][1]}°C)
+- 습도:     {data.get('humi')}%      (정상범위: {th['humi'][0]}~{th['humi'][1]}%)
+- 토양수분: {data.get('soil')}%      (정상범위: {th['soil'][0]}~{th['soil'][1]}%)
+- 조도:     {data.get('lux')} lux    (정상범위: {th['lux'][0]}~{th['lux'][1]} lux)
+- CO₂:      {data.get('gas_ppm')} ppm (정상범위: {th['gas_ppm'][0]}~{th['gas_ppm'][1]} ppm)
+경보 항목:  {data.get('alerts', [])}
 
-    for key, value in checks.items():
-        if value is None:
-            continue
-        lo, hi = th[key]
-        label  = LABELS[key]
-        unit   = UNITS[key]
+아래 형식으로 3문장 이내로 답변해주세요:
+① 현재 상태 요약
+② 문제점 (없으면 "이상 없음")
+③ 조치 방법 (없으면 "현재 상태 유지")
+    """.strip()
 
-        if value < lo:
-            problems.append(f"{label} 낮음 (현재 {value}{unit}, 기준 {lo}~{hi}{unit})")
-            if key == "temp":
-                actions.append("난방 또는 보온 조치 필요")
-            elif key == "humi":
-                actions.append("가습기 사용 또는 분무 권장")
-            elif key == "soil":
-                actions.append("물주기 필요")
-            elif key == "lux":
-                actions.append("조명 밝기 높이거나 조사 시간 연장")
-            elif key == "gas_ppm":
-                actions.append("환기 필요")
+    api_key = data.get("api_key") or os.environ.get("ANTHROPIC_API_KEY")
+    client  = anthropic.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=300,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return message.content[0].text
 
-        elif value > hi:
-            problems.append(f"{label} 높음 (현재 {value}{unit}, 기준 {lo}~{hi}{unit})")
-            if key == "temp":
-                actions.append("환기 또는 냉방 조치 필요")
-            elif key == "humi":
-                actions.append("제습 또는 환기 권장")
-            elif key == "soil":
-                actions.append("물주기 중단, 배수 확인")
-            elif key == "lux":
-                actions.append("조명 밝기 줄이거나 차광 필요")
-            elif key == "gas_ppm":
-                actions.append("즉시 환기 필요")
+아래 형식으로 3문장 이내로 답변해주세요.
+마크다운 기호(#, *, **, \n 등)는 절대 사용하지 마세요.
+일반 텍스트로만 작성하세요.
 
-    # ── 진단 문자열 생성 ──────────────────────────────────────────
-    if not problems:
-        return (
-            f"① {crop} 상태가 전반적으로 양호합니다.\n"
-            f"② 이상 없음\n"
-            f"③ 현재 상태 유지"
-        )
-    else:
-        problem_str = ", ".join(problems)
-        action_str  = ", ".join(dict.fromkeys(actions))  # 중복 제거
-        return (
-            f"① {crop} 재배 환경에 주의가 필요합니다.\n"
-            f"② 문제점: {problem_str}\n"
-            f"③ 조치 방법: {action_str}"
-        )
+① 현재 상태 요약
+② 문제점 (없으면 "이상 없음")
+③ 조치 방법 (없으면 "현재 상태 유지")

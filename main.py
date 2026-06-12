@@ -15,6 +15,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
 # ── 전역 상태 ─────────────────────────────────────────────────────
 latest_data: dict = {}
 connected_ws: list = []
@@ -102,10 +105,6 @@ app.add_middleware(
 )
 
 # ── REST 엔드포인트 ───────────────────────────────────────────────
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "GreenSense API 실행 중"}
-
 @app.get("/api/latest")
 def get_latest():
     if not latest_data:
@@ -320,3 +319,100 @@ def get_harvest(crop: str = "상추", sow_date: str = None):
         "avg_daily_gdd":   round(avg_daily_gdd, 2),
         "data_points":     len(rows),
     }
+# ── 챗봇 엔드포인트 ───────────────────────────────────────────────
+class ChatRequest(BaseModel):
+    message: str
+    history: Optional[list] = []
+
+@app.post("/api/chat")
+async def chat(req: ChatRequest):
+    if not latest_data:
+        sensor_info = "센서 데이터 없음"
+    else:
+        sensor_info = f"""
+현재 센서값:
+- 작물: {latest_data.get('crop')}
+- 온도: {latest_data.get('temp')}°C
+- 습도: {latest_data.get('humi')}%
+- 토양수분: {latest_data.get('soil')}%
+- 조도: {latest_data.get('lux')} lux
+- CO₂: {latest_data.get('gas_ppm')} ppm
+- 경보: {latest_data.get('alerts', [])}
+        """.strip()
+
+    try:
+        import anthropic, os
+        client = anthropic.Anthropic(
+            api_key=os.environ.get("ANTHROPIC_API_KEY")
+        )
+
+        # 대화 이력 구성
+        messages = []
+        for h in req.history[-10:]:
+            messages.append({"role": h["role"], "content": h["content"]})
+        messages.append({"role": "user", "content": req.message})
+
+        response = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=500,
+            system=f"""당신은 GreenSense 스마트 채소 재배 도우미입니다.
+사용자의 채소 재배 관련 질문에 친절하고 전문적으로 답변하세요.
+답변은 3문장 이내로 간결하게 해주세요.
+마크다운 기호는 사용하지 마세요.
+
+{sensor_info}""",
+            messages=messages
+        )
+        return {"reply": response.content[0].text}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+# ── 물주기 추적 ───────────────────────────────────────────────────
+watering_state = {
+    "soil_below_since": None,
+    "last_watered": None,
+}
+
+def update_watering_state(soil_value, soil_min, timestamp):
+    global watering_state
+    if soil_value < soil_min:
+        if watering_state["soil_below_since"] is None:
+            watering_state["soil_below_since"] = timestamp
+    else:
+        if watering_state["soil_below_since"] is not None:
+            watering_state["last_watered"] = timestamp
+        watering_state["soil_below_since"] = None
+
+# 작물별 토양수분 하한값 (sensor_agent.py와 동일)
+SOIL_MIN = {
+    "상추": 50, "깻잎": 45, "대파": 45, "시금치": 50, "청경채": 45,
+}
+
+@app.get("/api/watering")
+def get_watering():
+    if not latest_data:
+        return {"error": "센서 데이터 없음"}
+    
+    crop = latest_data.get("crop", "상추")
+    soil = latest_data.get("soil")
+    soil_min = SOIL_MIN.get(crop, 50)
+    timestamp = latest_data.get("timestamp")
+
+    update_watering_state(soil, soil_min, timestamp)
+
+    needs_water = soil < soil_min if soil is not None else False
+
+    return {
+        "crop": crop,
+        "soil": soil,
+        "soil_min": soil_min,
+        "needs_water": needs_water,
+        "below_since": watering_state["soil_below_since"],
+        "last_watered": watering_state["last_watered"],
+    }
+
+# ── 프론트엔드 정적 파일 서빙 ─────────────────────────────────────
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    return FileResponse("app_new/dist/index.html")

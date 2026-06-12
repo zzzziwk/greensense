@@ -1,0 +1,6 @@
+{
+  "name": "GreenSense",
+  "description": "GreenSense 스마트 채소 재배 모니터링 앱",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
