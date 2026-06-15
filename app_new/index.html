@@ -1969,34 +1969,45 @@
         `;
       }
 
+      const ALERT_ACTION_MAP = {
+        "온도 높음":   { state: "hot",     message: "너무 더워요! 시원한 곳으로 옮기거나 환기해주세요 🥵", priority: 1 },
+        "온도 낮음":   { state: "cold",    message: "조금 추워요... 따뜻한 곳으로 옮겨주세요 🥶", priority: 1 },
+        "토양수분 낮음": { state: "thirsty", message: "목말라요... 물 주실 때가 됐어요 💧", priority: 1 },
+        "토양수분 높음": { state: "help",   message: "물을 너무 많이 줬어요. 잠시 물주기를 멈춰주세요 🚱", priority: 2 },
+        "조도 낮음":   { state: "thirsty", message: "햇빛이 부족해요. 창가나 밝은 곳으로 옮겨주세요 ☀️", priority: 3 },
+        "조도 높음":   { state: "hot",     message: "빛이 너무 강해요. 직사광선을 피해주세요 🔆", priority: 3 },
+        "습도 낮음":   { state: "help",    message: "공기가 건조해요. 분무 또는 가습으로 습도를 올려주세요 💦", priority: 4 },
+        "습도 높음":   { state: "help",    message: "습도가 너무 높아요. 환기를 시켜주세요 🌬️", priority: 4 },
+        "CO₂ 낮음":   { state: "help",    message: "환기가 필요해요. 신선한 공기를 넣어주세요 🌬️", priority: 5 },
+        "CO₂ 높음":   { state: "help",    message: "CO₂가 높아요. 창문을 열어 환기해주세요 🌬️", priority: 5 },
+      };
+
       function getVegetableStateAndSpeech() {
-        const std = cropStandards[appState.currentCrop] || { temp: [15, 20], soil: [60, 80], lux: [6000, 10000] };
-        
-        let activeAlerts = appState.alerts || [];
-        const needsWater = appState.soil < appState.soilAlertThreshold;
+        const activeAlerts = appState.alerts || [];
 
-        let stressCount = 0;
-        let isTempHigh = appState.temp > std.temp[1];
-        let isTempLow = appState.temp < std.temp[0];
-        let isLuxLow = appState.lux < std.lux[0];
+        if (activeAlerts.length === 0) {
+          return { state: "happy", message: "오늘도 잘 자라고 있어요! 기분이 좋아요 😊" };
+        }
 
-        if (isTempHigh) stressCount++;
-        if (isTempLow) stressCount++;
-        if (needsWater) stressCount++;
-        if (isLuxLow) stressCount++;
+        const mapped = activeAlerts
+          .map(a => ALERT_ACTION_MAP[a])
+          .filter(Boolean)
+          .sort((a, b) => a.priority - b.priority);
 
-        const otherStressCount = activeAlerts.filter(a => !a.includes("수분") && !a.includes("온도") && !a.includes("조도")).length;
-        stressCount += otherStressCount;
+        if (mapped.length === 0) {
+          return { state: "happy", message: "오늘도 잘 자라고 있어요! 기분이 좋아요 😊" };
+        }
 
-        if (stressCount >= 2) {
-          return { state: "help", message: "도움이 필요해요... 😰" };
-        } else if (needsWater) {
-          return { state: "thirsty", message: "목말라요... 물 주실 때가 됐어요 💧" };
-        } else if (isTempHigh) {
-          return { state: "hot", message: "너무 더워요! 시원하게 해주세요 🥵" };
-        } else if (isTempLow) {
-          return { state: "cold", message: "조금 추워요... 따뜻하게 해주세요 🥶" };
-        } else if (isLuxLow) {
+        if (activeAlerts.length >= 2) {
+          const top = mapped.slice(0, 2);
+          const combinedMsg = top.length === 2
+            ? `${top[0].message.replace(/\s*[😰🥵🥶💧🚱☀️🔆💦🌬️]+\s*$/u, "")} / ${top[1].message}`
+            : top[0].message;
+          return { state: "help", message: `도움이 필요해요! ${combinedMsg}` };
+        }
+
+        return { state: mapped[0].state, message: mapped[0].message };
+      }
           return { state: "thirsty", message: "햇빛이 그리워요 ☀️" };
         }
 
