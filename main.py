@@ -136,7 +136,21 @@ async def diagnose(req: DiagnoseRequest):
     try:
         from ai_agent import get_diagnosis
         result = await get_diagnosis(data)
-        return {"diagnosis": result}
+        result = await get_diagnosis(data)
+        lines = result.strip().split('\n')
+        summary = problem = solution = ""
+        for line in lines:
+            if line.startswith('①'):
+                summary = line[1:].strip()
+            elif line.startswith('②'):
+                problem = line[1:].strip()
+            elif line.startswith('③'):
+                solution = line[1:].strip()
+        return {
+            "summary": summary or result,
+            "problem": problem or "이상 없음",
+            "solution": solution or "현재 상태 유지"
+        }
     except Exception as e:
         return {"error": str(e)}
 
