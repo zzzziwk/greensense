@@ -1186,6 +1186,21 @@
       body.dark-mode .section-nav-title {
         color: #F0F0F0 !important;
       }
+      @keyframes float {
+        0%   { transform: translateY(0px) scale(1); }
+        25%  { transform: translateY(-6px) scale(1.03); }
+        50%  { transform: translateY(-10px) scale(1); }
+        75%  { transform: translateY(-6px) scale(0.97); }
+        100% { transform: translateY(0px) scale(1); }
+      }
+      @keyframes shake {
+        0%   { transform: translateX(0px) rotate(0deg); }
+        20%  { transform: translateX(-3px) rotate(-2deg); }
+        40%  { transform: translateX(3px) rotate(2deg); }
+        60%  { transform: translateX(-2px) rotate(-1deg); }
+        80%  { transform: translateX(2px) rotate(1deg); }
+        100% { transform: translateX(0px) rotate(0deg); }
+      }
     </style>
   </head>
   <body>
@@ -1235,7 +1250,7 @@
         </div>
         
         <!-- 말풍선 (캐릭터 옆/위) -->
-        <div id="home-speech-bubble" style="position: relative; background: #FFFFFF; border: 2.5px solid var(--primary); border-radius: 16px; padding: 12px 14px; margin: 8px auto 10px auto; width: 100%; max-width: 280px; text-align: center; box-shadow: var(--shadow); z-index: 5;">
+        <div id="home-speech-bubble" style="position: relative; background: #FFFFFF; border: 2.5px solid var(--primary); border-radius: 24px; padding: 14px 18px; margin: 8px auto 10px auto; width: 100%; max-width: 300px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.10); z-index: 5; transition: background 0.4s, border-color 0.4s;">
           <span id="vegetable-speech-bubble" style="font-size: 13px; font-weight: 800; color: #111111; line-height: 1.45;">
             오늘도 잘 자라고 있어요! 기분이 좋아요 😊
           </span>
@@ -1244,7 +1259,7 @@
         </div>
 
         <!-- 캐릭터 구역 (중앙 배치, 너비 60%) -->
-        <div id="vegetable-avatar-container" style="width: 60%; max-width: 180px; margin: 0 auto; display: flex; justify-content: center; align-items: center; aspect-ratio: 1/1;">
+        <div id="vegetable-avatar-container" style="width: 70%; max-width: 240px; margin: 0 auto; display: flex; justify-content: center; align-items: center; aspect-ratio: 1/1; animation: float 3s ease-in-out infinite;">
           <!-- SVG 삽입됨 -->
         </div>
 
@@ -1754,11 +1769,11 @@
     <script>
       // 1. 기준 설정값 지정
       const cropStandards = {
-        "상추": { temp: [15, 25], humi: [60, 80], soil: [50, 85], lux: [1000, 12500], gas_ppm: [400, 1500] },
-        "깻잎": { temp: [15, 24], humi: [50, 70], soil: [45, 70], lux: [2000, 16200], gas_ppm: [400, 1000] },
-        "대파": { temp: [15, 25], humi: [55, 75], soil: [45, 75], lux: [800, 11000], gas_ppm: [400, 1000] },
-        "시금치": { temp: [10, 20], humi: [55, 75], soil: [50, 80], lux: [1000, 11000], gas_ppm: [400, 1000] },
-        "청경채": { temp: [15, 25], humi: [60, 75], soil: [45, 75], lux: [1000, 11000], gas_ppm: [400, 700] }
+        "상추": { temp: [15, 25], humi: [60, 80], soil: [50, 85], lux: [1000, 12500], gas_ppm: [200, 1500] },
+        "깻잎": { temp: [15, 24], humi: [50, 70], soil: [45, 70], lux: [2000, 16200], gas_ppm: [200, 1000] },
+        "대파": { temp: [15, 25], humi: [55, 75], soil: [45, 75], lux: [800, 11000], gas_ppm: [200, 1000] },
+        "시금치": { temp: [10, 20], humi: [55, 75], soil: [50, 80], lux: [1000, 11000], gas_ppm: [200, 1000] },
+        "청경채": { temp: [15, 25], humi: [60, 75], soil: [45, 75], lux: [1000, 11000], gas_ppm: [200, 700] }
       };
 
       // 2. 가상 백업 모의 데이터 (오프라인 수명 조치용)
@@ -2005,14 +2020,9 @@
             : top[0].message;
           return { state: "help", message: `도움이 필요해요! ${combinedMsg}` };
         }
-
         return { state: mapped[0].state, message: mapped[0].message };
       }
-          return { state: "thirsty", message: "햇빛이 그리워요 ☀️" };
-        }
 
-        return { state: "happy", message: "오늘도 잘 자라고 있어요! 기분이 좋아요 😊" };
-      }
 
       function updateWateringCardUI(data) {
         const card = document.getElementById('home-watering-card');
@@ -2092,11 +2102,34 @@
         const bubbleResult = getVegetableStateAndSpeech();
         
         const speechBubble = document.getElementById('vegetable-speech-bubble');
+        const bubbleBox = document.getElementById('home-speech-bubble');
+        const bubbleTail = document.getElementById('home-speech-bubble-tail');
+        // 상태별 말풍선 색상
+        const bubbleColors = {
+          happy:   { bg: '#FFFFFF', border: 'var(--primary)', tail: '#FFFFFF', tailBorder: 'var(--primary)' },
+          thirsty: { bg: '#EBF5FB', border: '#3498DB',        tail: '#EBF5FB', tailBorder: '#3498DB' },
+          hot:     { bg: '#FEF9E7', border: '#E67E22',        tail: '#FEF9E7', tailBorder: '#E67E22' },
+          cold:    { bg: '#EBF5FB', border: '#5DADE2',        tail: '#EBF5FB', tailBorder: '#5DADE2' },
+          help:    { bg: '#FDEDEC', border: '#E74C3C',        tail: '#FDEDEC', tailBorder: '#E74C3C' },
+        };
         if (speechBubble) {
           speechBubble.innerText = bubbleResult.message;
+        if (bubbleBox && bubbleTail) {
+          const bc = bubbleColors[bubbleResult.state] || bubbleColors.happy;
+          bubbleBox.style.background = bc.bg;
+          bubbleBox.style.borderColor = bc.border;
+          bubbleTail.style.background = bc.tail;
+          bubbleTail.style.borderRightColor = bc.tailBorder;
+          bubbleTail.style.borderBottomColor = bc.tailBorder;
+        }
         }
         
         const avatarContainer = document.getElementById('vegetable-avatar-container');
+        if (avatarContainer) {
+          avatarContainer.style.animation = bubbleResult.state === 'help'
+            ? 'shake 1.5s ease-in-out infinite'
+            : 'float 3s ease-in-out infinite';
+        }
         if (avatarContainer) {
           avatarContainer.innerHTML = generateVegetableSVG(crop, bubbleResult.state);
         }
@@ -2806,9 +2839,9 @@
           totalHumi += item.humi;
           totalSoil += item.soil;
           if (item.alerts) {
-            alertSum += item.alerts.length;
-            item.alerts.forEach(al => {
-              alertCounterMap[al] = (alertCounterMap[al] || 0) + 1;
+              const alertArr = Array.isArray(item.alerts) ? item.alerts : JSON.parse(item.alerts || "[]");
+              alertSum += alertArr.length;
+              alertArr.forEach(al => {
             });
           }
         });
@@ -3509,7 +3542,7 @@
 
       function triggerCropChangeNoConfirm(crop) {
         if (!cropStandards[crop]) {
-          cropStandards[crop] = { temp: [15, 25], humi: [60, 80], soil: [60, 80], lux: [6000, 12000], gas_ppm: [400, 1000] };
+          cropStandards[crop] = { temp: [15, 25], humi: [60, 80], soil: [60, 80], lux: [6000, 12000], gas_ppm: [200, 1000] };
         }
         
         const prev = appState.currentCrop;
